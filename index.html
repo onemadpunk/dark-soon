@@ -1,4 +1,12 @@
 <title>Dark Soon</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#24182c">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Dark Soon">
+<link rel="apple-touch-icon" href="icon-180.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Mystery+Quest&family=Nunito:wght@400;700;800&display=swap">
@@ -112,6 +120,24 @@ kbd {
 .small { background: none; border: 2px solid #5a3a4a; color: var(--ink-dim); border-radius: 8px; padding: 3px 12px; cursor: pointer; font: inherit; }
 .small:focus-visible { outline: 2px solid var(--pine); outline-offset: 2px; }
 @media (max-width: 520px) { .touch button { width: 50px; height: 50px; } }
+.touch .mid { align-self: flex-end; gap: 8px; }
+.touch .mid button { width: 42px; height: 42px; font-size: 17px; }
+/* Full screen: the stage fills the screen and the game sits in the middle at its own shape.
+   The same layout is used when the game is opened from a home-screen icon. */
+.stage:fullscreen { width: 100vw; height: 100vh; max-width: none; aspect-ratio: auto; border: 0; border-radius: 0; box-shadow: none; display: flex; align-items: center; justify-content: center; }
+.stage:-webkit-full-screen { width: 100vw; height: 100vh; max-width: none; aspect-ratio: auto; border: 0; border-radius: 0; box-shadow: none; display: flex; align-items: center; justify-content: center; }
+.stage:fullscreen canvas { width: min(100vw, calc(100vh * 640 / 390)); height: auto; aspect-ratio: 640 / 390; }
+.stage:-webkit-full-screen canvas { width: min(100vw, calc(100vh * 640 / 390)); height: auto; aspect-ratio: 640 / 390; }
+.stage:fullscreen .touch button:not(.mid button) { width: 76px; height: 76px; font-size: 28px; }
+.stage:-webkit-full-screen .touch button:not(.mid button) { width: 76px; height: 76px; font-size: 28px; }
+@media (display-mode: fullscreen), (display-mode: standalone) {
+  header, .bar { display: none; }
+  .wrap { max-width: none; padding: 0; height: 100vh; }
+  .stage { width: 100vw; height: 100vh; aspect-ratio: auto; border: 0; border-radius: 0; box-shadow: none; display: flex; align-items: center; justify-content: center; }
+  .stage canvas { width: min(100vw, calc(100vh * 640 / 390)); height: auto; aspect-ratio: 640 / 390; }
+  .touch { padding: 14px max(14px, env(safe-area-inset-right)) max(14px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left)); }
+  .touch button:not(.mid button) { width: 76px; height: 76px; font-size: 28px; }
+}
 </style>
 
 <div class="wrap">
@@ -127,6 +153,11 @@ kbd {
         <button id="tLeft" aria-label="Left">◀</button>
         <button id="tRight" aria-label="Right">▶</button>
       </div>
+      <div class="grp mid">
+        <button id="tMap" aria-label="Map">🗺</button>
+        <button id="tMusic" aria-label="Music on or off">♪</button>
+        <button id="tFull" class="fsBtn" aria-label="Full screen">⛶</button>
+      </div>
       <div class="grp">
         <button id="tDown" aria-label="Drop down">▼</button>
         <button id="tJump" aria-label="Jump">▲</button>
@@ -140,6 +171,7 @@ kbd {
       <div class="btns">
         <button class="btn" id="continueBtn" hidden>Continue</button>
         <button class="btn" id="playBtn">New game</button>
+        <button class="btn alt fsBtn" id="fullBtn">Full screen</button>
       </div>
       </div>
     </div>
@@ -161,6 +193,7 @@ kbd {
       <button class="small" id="mapBtn">Map</button>
       <button class="small" id="muteBtn">Sound: on</button>
       <button class="small" id="musicBtn">Music: on</button>
+      <button class="small fsBtn" id="fullBtn2">Full screen</button>
     </div>
   </div>
 </div>
@@ -1752,6 +1785,31 @@ const touchUI = document.getElementById('touch');
 if (matchMedia('(pointer: coarse)').matches) touchUI.classList.add('on');
 addEventListener('touchstart', () => touchUI.classList.add('on'), { once: true, passive: true });
 document.getElementById('mapBtn').addEventListener('click', () => { if (running) mapOpen = !mapOpen; });
+document.getElementById('tMap').addEventListener('click', () => { if (running) mapOpen = !mapOpen; });
+document.getElementById('tMusic').addEventListener('click', () => document.getElementById('musicBtn').click());
+
+// ---------- Full screen ----------
+// The whole stage (game, touch buttons, menus) goes full screen; on phones and tablets it also tries to stay sideways.
+const stage = document.getElementById('stage');
+const fsNow = () => document.fullscreenElement || document.webkitFullscreenElement;
+const fsReq = stage.requestFullscreen || stage.webkitRequestFullscreen;
+function toggleFull() {
+  if (fsNow()) { (document.exitFullscreen || document.webkitExitFullscreen).call(document); return; }
+  const r = fsReq.call(stage, { navigationUI: 'hide' });
+  const lock = () => { try { screen.orientation.lock('landscape').catch(() => {}); } catch (e) {} };
+  if (r && r.then) r.then(lock, () => {}); else lock();
+}
+function fsLabel() {
+  const on = !!fsNow();
+  document.getElementById('fullBtn').textContent = on ? 'Exit full screen' : 'Full screen';
+  document.getElementById('fullBtn2').textContent = on ? 'Exit full screen' : 'Full screen';
+  setTimeout(fitScale, 100);
+}
+const homeScreenApp = matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches || navigator.standalone;
+if (fsReq && !homeScreenApp) {
+  for (const id of ['fullBtn', 'fullBtn2', 'tFull']) document.getElementById(id).addEventListener('click', toggleFull);
+  document.addEventListener('fullscreenchange', fsLabel); document.addEventListener('webkitfullscreenchange', fsLabel);
+} else document.querySelectorAll('.fsBtn').forEach(b => b.hidden = true); // already full screen from a home-screen icon, or iPhone Safari (use Add to Home Screen)
 canvas.addEventListener('pointerdown', e => {
   if (mapOpen) mapOpen = false;
   if (keypad) {
