@@ -10,7 +10,7 @@ create table if not exists public.plays (
 create table if not exists public.scores (
   id bigint generated always as identity primary key,
   created_at timestamptz not null default now(),
-  initials text not null check (initials ~ '^[A-Z]{3}$'),
+  name text not null check (char_length(name) between 1 and 12 and name ~ '^[A-Za-z0-9 ._!''-]+$'),
   diff text not null check (diff in ('easy', 'medium', 'hard')),
   seconds integer not null check (seconds between 300 and 86400),
   golden integer not null default 0 check (golden between 0 and 17)

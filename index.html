@@ -74,10 +74,10 @@ canvas { display: block; width: 100%; height: 100%; }
 .board li { display: flex; gap: 12px; justify-content: space-between; padding: 3px 10px; border-radius: 6px; }
 .board li:nth-child(odd) { background: rgba(255,255,255,.06); }
 .board li.me { background: rgba(255,200,90,.25); }
-.board .who { font-family: var(--font-display); color: var(--amber); letter-spacing: .1em; min-width: 3.2em; text-align: left; }
+.board .who { font-family: var(--font-display); color: var(--amber); letter-spacing: .03em; flex: 1; min-width: 0; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .board .gold { opacity: .8; min-width: 3em; text-align: right; }
 .score-form { display: flex; flex-direction: column; align-items: center; gap: 4px; }
-.score-form input { width: 4.2em; font: inherit; font-size: 1.4rem; text-align: center; text-transform: uppercase; letter-spacing: .15em; padding: 2px 4px; border-radius: 8px; border: 2px solid #1c1424; background: #f6ecd8; color: #2a1d33; }
+.score-form input { width: 9em; max-width: 60vw; font: inherit; font-size: 1.3rem; text-align: center; padding: 2px 4px; border-radius: 8px; border: 2px solid #1c1424; background: #f6ecd8; color: #2a1d33; }
 .score-msg { margin: 0; min-height: 1.2em; font-size: .9rem; }
 @media (max-height: 520px) { .board { font-size: .85rem; } .board li { padding: 1px 8px; } }
 .credit { margin: 4px 0 0; font-size: .8rem; color: var(--ink-dim); letter-spacing: .02em; }
@@ -262,8 +262,8 @@ kbd {
       <h2 id="winTitle">Lanterns lit!</h2>
       <p id="winText">Every firefly is back.</p>
       <form id="scoreForm" class="score-form" hidden autocomplete="off">
-        <label for="initials">Put your initials on the scoreboard</label>
-        <div><input id="initials" maxlength="3" autocapitalize="characters" spellcheck="false" placeholder="ABC" aria-label="Three letter initials"> <button class="btn" id="sendScore" type="submit">Send</button></div>
+        <label for="playerName">Put your name on the scoreboard</label>
+        <div><input id="playerName" maxlength="12" autocapitalize="words" spellcheck="false" placeholder="Your name" aria-label="Your name"> <button class="btn" id="sendScore" type="submit">Send</button></div>
         <p id="scoreMsg" class="score-msg"></p>
       </form>
       <div id="fails" class="fails"></div>
@@ -1991,7 +1991,7 @@ function padButtonAt(gx, gy) {
   return -1;
 }
 addEventListener('keydown', e => {
-  if (e.target && e.target.tagName === 'INPUT') return; // typing initials
+  if (e.target && e.target.tagName === 'INPUT') return; // typing a name
   if (keypad) {
     e.preventDefault();
     if (/^Digit\d$|^Numpad\d$/.test(e.code)) padPress(e.code.slice(-1));
@@ -4239,14 +4239,14 @@ function showBoard(diff, listEl) {
   boardDiff = diff;
   document.querySelectorAll('[data-board]').forEach(b => b.setAttribute('aria-pressed', b.dataset.board === diff));
   listEl.innerHTML = '<li>Loading...</li>';
-  sb(`scores?select=initials,seconds,golden,created_at&diff=eq.${diff}&order=seconds.asc,created_at.asc&limit=10`).then(rows => {
+  sb(`scores?select=name,seconds,golden,created_at&diff=eq.${diff}&order=seconds.asc,created_at.asc&limit=10`).then(rows => {
     listEl.innerHTML = '';
     if (!rows.length) { listEl.innerHTML = '<li>No times yet. Be the first!</li>'; return; }
     rows.forEach((r, i) => {
       const li = document.createElement('li');
-      if (myScore && myScore.diff === diff && r.initials === myScore.initials && r.seconds === myScore.seconds) li.className = 'me';
+      if (myScore && myScore.diff === diff && r.name === myScore.name && r.seconds === myScore.seconds) li.className = 'me';
       li.innerHTML = `<span>${i + 1}.</span><span class="who"></span><span>${clock(r.seconds)}</span><span class="gold">✦ ${r.golden}</span>`;
-      li.querySelector('.who').textContent = r.initials;
+      li.querySelector('.who').textContent = r.name;
       listEl.appendChild(li);
     });
   }).catch(() => { listEl.innerHTML = "<li>Can't reach the scoreboard right now.</li>"; });
@@ -4269,13 +4269,15 @@ if (scoresOn) {
   document.getElementById('scoresBtn').addEventListener('click', openScores);
   document.getElementById('scoresClose').addEventListener('click', () => { document.getElementById('scoresScreen').hidden = true; startScreen.hidden = false; });
   document.querySelectorAll('[data-board]').forEach(b => b.addEventListener('click', () => showBoard(b.dataset.board, document.getElementById('boardList'))));
-  const ini = document.getElementById('initials');
-  ini.addEventListener('input', () => { ini.value = ini.value.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 3); });
+  const ini = document.getElementById('playerName');
+  try { ini.value = localStorage.getItem('darksoon-name') || ''; } catch (e) {}
+  ini.addEventListener('input', () => { ini.value = ini.value.replace(/[^A-Za-z0-9 ._!'-]/g, '').replace(/^ +/, '').replace(/  +/g, ' ').slice(0, 12); });
   document.getElementById('scoreForm').addEventListener('submit', e => {
     e.preventDefault();
-    const form = e.target, msg = document.getElementById('scoreMsg'), initials = ini.value;
-    if (initials.length !== 3) { msg.textContent = 'Three letters, please!'; return; }
-    const row = { initials, diff: form.dataset.diff, seconds: +form.dataset.seconds, golden: +form.dataset.golden };
+    const form = e.target, msg = document.getElementById('scoreMsg'), name = ini.value.trim();
+    if (!name) { msg.textContent = 'Type your name first!'; return; }
+    try { localStorage.setItem('darksoon-name', name); } catch (e) {}
+    const row = { name, diff: form.dataset.diff, seconds: +form.dataset.seconds, golden: +form.dataset.golden };
     document.getElementById('sendScore').disabled = true; msg.textContent = 'Sending...';
     sb('scores', row).then(() => {
       myScore = row; form.hidden = true;
