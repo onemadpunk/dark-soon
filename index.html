@@ -171,6 +171,13 @@ kbd {
 /* side-bar controls: the game sits in the middle and the thumbs get the space either side, off the picture */
 .touch.side .grp { position: absolute; }
 .touch.side .mid { flex-direction: column; }
+.stick { position: relative; width: 146px; height: 146px; border-radius: 50%; border: 3px solid rgba(28,20,36,.8); background: rgba(247,234,217,.16);
+  display: flex; align-items: center; justify-content: space-between; padding: 0 10%; color: var(--ink); font-size: 20px; pointer-events: none; }
+.stick span { opacity: .75; }
+.stick.l span:first-child, .stick.r span:nth-child(2) { color: var(--amber); opacity: 1; }
+.knob { position: absolute; left: 50%; top: 50%; width: 46%; height: 46%; margin: -23% 0 0 -23%; border-radius: 50%;
+  border: 3px solid rgba(28,20,36,.85); background: rgba(247,234,217,.45); transition: transform .08s; }
+.stick.l .knob, .stick.r .knob { background: rgba(255,184,77,.6); transition: none; }
 </style>
 
 <div class="wrap">
@@ -183,8 +190,7 @@ kbd {
     <canvas id="game" width="1280" height="780" aria-label="Game screen"></canvas>
     <div class="touch" id="touch">
       <div class="grp">
-        <button id="tLeft" aria-label="Left">◀</button>
-        <button id="tRight" aria-label="Right">▶</button>
+        <div class="stick" id="stick" aria-label="Walk left or right"><span>◀</span><span>▶</span><div class="knob" id="knob"></div></div>
       </div>
       <div class="grp mid">
         <button id="tMap" aria-label="Map">🗺</button>
@@ -1844,46 +1850,58 @@ addEventListener('keydown', e => {
   keys[k] = true; audioInit();
 });
 addEventListener('keyup', e => { const k = KEYMAP[e.code]; if (k) keys[k] = false; });
-// Touch controls. The buttons show where to press, but the whole screen counts: a thumb anywhere on the left half
-// walks (towards whichever arrow it's nearer), and anywhere on the right half jumps or drops. Sliding a thumb from
-// one button to the other switches straight over without lifting it, so walk-then-jump is one smooth move.
-const TBTN = { l: 'tLeft', r: 'tRight', j: 'tJump', d: 'tDown' };
-const touchHeld = new Map(); // pointer id -> key
+// Touch controls. Left thumb: a joystick. Press anywhere in the circle (or anywhere on the left half) and Isaac walks
+// towards that side of its middle; slide the thumb across to turn round. Right thumb: anywhere on the right half
+// jumps, unless it's on the drop button. Thumbs can slide between controls without lifting.
+const TBTN = { j: 'tJump', d: 'tDown' };
+const touchHeld = new Map(); // pointer id -> key ('l', 'r', 'n' for the joystick held in the middle, 'j', 'd')
+const stickPtrs = new Set();
+const stickEl = document.getElementById('stick'), knobEl = document.getElementById('knob');
+function stickKey(x, y) {
+  const r = stickEl.getBoundingClientRect(), R = r.width / 2, dx = x - (r.left + R), dy = y - (r.top + R);
+  const lim = R * 0.55, kx = Math.max(-lim, Math.min(lim, dx)), ky = Math.max(-lim * .4, Math.min(lim * .4, dy));
+  knobEl.style.transform = `translate(${kx}px, ${ky}px)`;
+  return dx < -R * 0.15 ? 'l' : dx > R * 0.15 ? 'r' : 'n';
+}
 function touchKeyAt(x, y) {
-  const st = touchUI.getBoundingClientRect();
   const ctr = k => { const r = document.getElementById(TBTN[k]).getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; };
   const pick = (a, b) => { const [ax, ay] = ctr(a), [bx, by] = ctr(b); return Math.hypot(x - ax, y - ay) <= Math.hypot(x - bx, y - by) ? a : b; };
-  if (x < st.left + st.width / 2) { const [lx] = ctr('l'), [rx] = ctr('r'); return x < (lx + rx) / 2 ? 'l' : 'r'; }
   // right half: jump, unless the thumb is right on (or just round) the drop button
   const [dx, dy] = ctr('d'), dr = document.getElementById(TBTN.d).getBoundingClientRect().width;
   return pick('j', 'd') === 'd' && Math.hypot(x - dx, y - dy) < dr * 0.9 ? 'd' : 'j';
 }
 function touchPress(k) {
+  if (k === 'n') return;
   if (k === 'j' && !keys.j) p.jumpBuf = 0.12;
   if (k === 'd' && !keys.d) p.drop = 0.2;
-  keys[k] = true; document.getElementById(TBTN[k]).classList.add('down');
+  keys[k] = true; (TBTN[k] ? document.getElementById(TBTN[k]) : stickEl).classList.add(TBTN[k] ? 'down' : k);
   try { navigator.vibrate && navigator.vibrate(8); } catch (e) {}
 }
 function touchRelease(k) {
-  if ([...touchHeld.values()].includes(k)) return; // another thumb is still on it
-  keys[k] = false; document.getElementById(TBTN[k]).classList.remove('down');
+  if (k === 'n' || [...touchHeld.values()].includes(k)) return; // another thumb is still on it
+  keys[k] = false; (TBTN[k] ? document.getElementById(TBTN[k]) : stickEl).classList.remove(TBTN[k] ? 'down' : k);
 }
 const touchUI = document.getElementById('touch');
 touchUI.addEventListener('pointerdown', e => {
   if (e.target.closest('.mid')) return; // map, music and full screen buttons work as normal buttons
   e.preventDefault(); audioInit();
   if (mapOpen) { mapOpen = false; return; }
-  const k = touchKeyAt(e.clientX, e.clientY);
-  if (keypad) { if (!canvasTap(e)) padKey(k); return; }
+  const st = touchUI.getBoundingClientRect(), onStick = e.clientX < st.left + st.width / 2;
+  const k = onStick ? stickKey(e.clientX, e.clientY) : touchKeyAt(e.clientX, e.clientY);
+  if (keypad) { if (onStick) knobEl.style.transform = ''; if (!canvasTap(e) && k !== 'n') padKey(k); return; }
+  if (onStick) stickPtrs.add(e.pointerId);
   try { touchUI.setPointerCapture(e.pointerId); } catch (err) {}
   touchHeld.set(e.pointerId, k); touchPress(k);
 });
 touchUI.addEventListener('pointermove', e => {
   const old = touchHeld.get(e.pointerId); if (!old) return;
-  const k = touchKeyAt(e.clientX, e.clientY); if (k === old) return;
+  const k = stickPtrs.has(e.pointerId) ? stickKey(e.clientX, e.clientY) : touchKeyAt(e.clientX, e.clientY); if (k === old) return;
   touchHeld.set(e.pointerId, k); touchRelease(old); touchPress(k);
 });
-const touchUp = e => { const k = touchHeld.get(e.pointerId); if (!k) return; touchHeld.delete(e.pointerId); touchRelease(k); };
+const touchUp = e => {
+  if (stickPtrs.delete(e.pointerId)) knobEl.style.transform = '';
+  const k = touchHeld.get(e.pointerId); if (!k) return; touchHeld.delete(e.pointerId); touchRelease(k);
+};
 touchUI.addEventListener('pointerup', touchUp); touchUI.addEventListener('pointercancel', touchUp);
 setInterval(() => touchUI.classList.toggle('live', running), 250); // only while playing, so menus stay tappable
 if (matchMedia('(pointer: coarse)').matches) touchUI.classList.add('on');
@@ -1919,22 +1937,23 @@ function layoutTouch() {
   const side = fill && touchOn;
   touchUI.classList.toggle('side', side);
   const groups = touchUI.querySelectorAll('.grp');
-  groups.forEach(g => g.removeAttribute('style'));
+  groups.forEach(g => g.removeAttribute('style')); stickEl.removeAttribute('style');
   if (!side) { canvas.style.width = fill ? `min(100vw, calc(100dvh * 640 / 390))` : ''; canvas.style.marginBottom = ''; return; }
   const W = stage.clientWidth, H = stage.clientHeight;
-  const btn = Math.max(52, Math.min(76, Math.round(Math.min(W, H) * 0.15))), strip = btn * 2 + 34, pad = Math.max(8, Math.min(W, H) * 0.04);
+  const btn = Math.max(52, Math.min(76, Math.round(Math.min(W, H) * 0.15))), stickD = Math.round(btn * 1.8), strip = Math.max(stickD, btn * 2 + 10) + 24, pad = Math.max(8, Math.min(W, H) * 0.04);
   // two ways to keep the buttons off the picture: strips down the sides (phones), or a row underneath (tablets). Use whichever leaves the game bigger.
-  const sideW = Math.min(W - strip * 2, H * 640 / 390), row = btn + pad * 2, belowW = Math.min(W, (H - row) * 640 / 390);
+  const sideW = Math.min(W - strip * 2, H * 640 / 390), row = stickD + pad * 2, belowW = Math.min(W, (H - row) * 640 / 390);
   const below = belowW > sideW, cw = below ? belowW : sideW;
   canvas.style.width = cw + 'px';
   canvas.style.marginBottom = below ? row + 'px' : '';
   const gut = below ? 0 : (W - cw) / 2;
   const [left, mid, right] = groups;
   for (const b of touchUI.querySelectorAll('.grp:not(.mid) button')) { b.style.width = b.style.height = btn + 'px'; }
+  stickEl.style.width = stickEl.style.height = stickD + 'px';
   const edge = below ? Math.max(pad, (W - cw) / 2 + pad) : (gut - (btn * 2 + 10)) / 2;
-  Object.assign(left.style, { left: edge + 'px', bottom: pad + 'px' });
-  Object.assign(right.style, { right: edge + 'px', bottom: pad + 'px' });
-  if (below) Object.assign(mid.style, { left: '50%', transform: 'translateX(-50%)', bottom: pad + (btn - 42) / 2 + 'px', flexDirection: 'row', alignSelf: 'auto' });
+  Object.assign(left.style, { left: (below ? edge : (gut - stickD) / 2) + 'px', bottom: pad + 'px' });
+  Object.assign(right.style, { right: edge + 'px', bottom: pad + (stickD - btn) / 2 + 'px' });
+  if (below) Object.assign(mid.style, { left: '50%', transform: 'translateX(-50%)', bottom: pad + (stickD - 42) / 2 + 'px', flexDirection: 'row', alignSelf: 'auto' });
   else Object.assign(mid.style, { right: (gut - 42) / 2 + 'px', top: pad + 'px', alignSelf: 'auto' });
   setTimeout(fitScale, 50);
 }
