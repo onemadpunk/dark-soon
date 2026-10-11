@@ -8,8 +8,8 @@ const src = fs.readFileSync(process.argv[2] || __dirname + '/index.html', 'utf8'
 const a = src.indexOf('const T = 20'), b = src.indexOf('\n', src.indexOf('const isSolid'));
 const ctx = { document: { getElementById: () => ({ getContext: () => ({}), getBoundingClientRect: () => ({ width: 1280 }) }) }, matchMedia: () => ({ matches: false }) };
 vm.createContext(ctx);
-vm.runInContext(src.slice(a, b) + '\nthis.out = { ROOMS, START, T, W, H, tileAt };', ctx);
-const { ROOMS, START, T, W, H, tileAt: rawTile } = ctx.out;
+vm.runInContext(src.slice(a, b) + '\nthis.out = { ROOMS, START, T, W, H, tileAt, SWITCH };', ctx);
+const { ROOMS, START, T, W, H, tileAt: rawTile, SWITCH } = ctx.out;
 let AB = {}; // what Isaac has so far; friends' little doors ('g') open once they've been given what they want
 function tileAt(room, c, r) { const ch = rawTile(room, c, r); return ch === 'g' ? (AB['gave:' + room.gateBy] ? '.' : '#') : ch; }
 
@@ -84,10 +84,60 @@ function bfsRoom(room, starts, ab) {
   seen.hooks = seen.hooks.map(j => hooks[j]);
   return seen;
 }
+// The Clockwork Workshop: jump flips gravity, so Isaac walks the floor or the ceiling and falls between them.
+function bfsFlip(room, starts) {
+  const S = stands(room), hazard = ch => ch === '^' || ch === 'v';
+  const ceil = (c, r) => r > 0 && r < H - 2 && solidish(tileAt(room, c, r - 1)) && !solidish(tileAt(room, c, r)) && !solidish(tileAt(room, c, r + 1)) && !hazard(tileAt(room, c, r)) && !hazard(tileAt(room, c, r + 1));
+  const floor = (c, r) => S.has(c + ',' + r);
+  const seen = new Set(), out = new Set(), q = [];
+  const push = (c, r, up) => { const k = c + ',' + r + (up ? 'u' : ''); if (seen.has(k)) return; seen.add(k); q.push([c, r, up]); out.add(c + ',' + (up ? r + 1 : r)); };
+  for (const s of starts) if (S.has(s)) { const [c, r] = s.split(',').map(Number); push(c, r, false); }
+  const fall = (c0, r0, up) => { // drift up to two columns while falling
+    for (let cc = c0 - 2; cc <= c0 + 2; cc++) {
+      if (cc < 1 || cc > W - 2) continue;
+      const path = [];
+      for (let r = up ? r0 - 1 : r0 + 1; r > 0 && r < H - 1; r += up ? -1 : 1) {
+        const ch = tileAt(room, cc, r);
+        if (solidish(ch) || hazard(ch)) break;
+        path.push(cc + ',' + r);
+        if (up ? ceil(cc, r) : floor(cc, r)) { path.forEach(p => out.add(p)); push(cc, r, up); break; }
+      }
+    }
+  };
+  while (q.length) {
+    const [c, r, up] = q.pop();
+    for (const d of [-1, 1]) { // walk, or step off the edge
+      const c2 = c + d;
+      if (up ? ceil(c2, r) : floor(c2, r)) push(c2, r, up);
+      else if (!solidish(tileAt(room, c2, r)) && !solidish(tileAt(room, c2, up ? r + 1 : r - 1))) fall(c2, r, up);
+    }
+    fall(c, r, !up); // flip
+  }
+  out.hooks = [];
+  return out;
+}
+// Rooms with levers: whatever Isaac reaches with the blocks one way, he can stand on after throwing a lever the other way.
+function bfsAny(room, starts, ab) {
+  if (room.flipJump) return bfsFlip(room, starts);
+  if (!room.swGroup) return bfsRoom(room, starts, ab);
+  const g = room.swGroup, pts = new Set(starts), acc = new Set();
+  let lever = false;
+  for (let i = 0; i < 6; i++) {
+    for (const state of lever ? [false, true] : [false]) {
+      SWITCH[g] = state;
+      const r = bfsRoom(room, [...pts], ab); r.forEach(x => { acc.add(x); pts.add(x); });
+      if (room.levers.some(lv => thingReached(r, lv.y / T - 1, Math.floor(lv.x / T)))) lever = true;
+    }
+  }
+  SWITCH[g] = false;
+  acc.hooks = [];
+  return acc;
+}
 function exitsReached(room, reach, ab) {
   const ex = room.exits || {}, out = [], list = [...reach].map(s => s.split(',').map(Number));
-  if (ex.left && list.some(([c, r]) => c <= 1 && r >= ex.left[0] && r <= ex.left[1])) out.push('left');
-  if (ex.right && list.some(([c, r]) => c >= W - 2 && r >= ex.right[0] && r <= ex.right[1])) out.push('right');
+  const shut = side => !AB['gave:' + room.gateBy] && room.gateCells.some(([c]) => side === 'left' ? c <= 1 : c >= W - 2); // a closed door across the exit
+  if (ex.left && !shut('left') && list.some(([c, r]) => c <= 1 && r >= ex.left[0] && r <= ex.left[1])) out.push('left');
+  if (ex.right && !shut('right') && list.some(([c, r]) => c >= W - 2 && r >= ex.right[0] && r <= ex.right[1])) out.push('right');
   const shaftTop = ab.boots && room.shaft && list.some(([c]) => c >= room.shaft[0] && c <= room.shaft[1]);
   if (ex.top && (shaftTop || list.some(([c, r]) => r <= 4 && c >= ex.top[0] - 1 && c <= ex.top[1] + 1))) out.push('top');
   if (ex.bottom && list.some(([c, r]) => c >= ex.bottom[0] && c <= ex.bottom[1] && tileAt(room, c, r + 1) === '=')) out.push('bottom');
@@ -114,7 +164,7 @@ function run(ab) {
   const q = [[START, ['3,15']]];
   while (q.length) {
     const [k, st] = q.pop(), room = ROOMS[k], before = reach[k].size;
-    const r = bfsRoom(room, [...st, ...reach[k]], ab);
+    const r = bfsAny(room, [...st, ...reach[k]], ab);
     if (r.size === before && before > 0) continue;
     reach[k] = r;
     for (const side of exitsReached(room, r, ab)) {
@@ -140,12 +190,14 @@ for (;;) {
   const reach = run(ab);
   let gained = false;
   for (const k in ROOMS) for (const it of ROOMS[k].items || []) {
-    if (it.kind === 'key' || ab[it.kind] || it.needs && !ab[it.needs]) continue;
+    const name = it.kind === 'key' ? it.id : it.kind;
+    if (ab[name] || it.needs && !ab[it.needs]) continue;
     const [r, c] = cellOf(it);
-    if (thingReached(reach[k], r, c)) { ab[it.kind] = true; order.push(`${it.kind} (${ROOMS[k].name})`); gained = true; }
+    if (thingReached(reach[k], r, c)) { ab[name] = true; order.push(`${it.kind} (${ROOMS[k].name})`); gained = true; }
   }
   for (const k in ROOMS) for (const n of ROOMS[k].npcs || []) { // friends: bring them what they want
-    if (ab['gave:' + n.id] || !(n.wants ? ab[n.wants] : n.kind === 'keypad')) continue;
+    const keys = Object.keys(ab).filter(a => a.endsWith(':key')).length;
+    if (ab['gave:' + n.id] || !(n.wants ? ab[n.wants] : n.kind === 'keypad' || n.kind === 'door' && keys >= 7)) continue;
     if (thingReached(reach[k], n.y / T - 1, Math.floor(n.x / T))) { ab['gave:' + n.id] = true; order.push(`helped ${n.id}`); gained = true; }
   }
   if (!gained) break;
@@ -164,6 +216,7 @@ for (const k in ROOMS) {
     if (thingReached(full[k], r, c)) lines.push(`  fly ${r},${c} needs an ability`);
     else { lines.push(`  fly ${r},${c} UNREACHABLE`); miss++; }
   }
+  for (const n of room.npcs || []) if (n.kind === 'greatlantern' && !thingReached(full[k], n.y / T - 1, Math.floor(n.x / T))) { lines.push('  great lantern UNREACHABLE'); miss++; }
   for (const it of room.items || []) { const [r, c] = cellOf(it); if (!thingReached(full[k], r, c)) { lines.push(`  item ${it.kind} UNREACHABLE`); miss++; } }
   for (const f of room.gold || []) { const [r, c] = cellOf(f); gold++; if (!thingReached(full[k], r, c)) { lines.push(`  golden fly ${r},${c} UNREACHABLE`); miss++; } }
   if (room.window) { // the window glass must not cut through any tile

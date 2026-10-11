@@ -101,10 +101,10 @@ With 60 rooms, 5 minutes is too short. In the full game the sun takes about 40 m
 ### 7. The secret (5 rooms): the finale
 | Room | Challenge |
 |---|---|
-| Behind the Bookcase | A hidden passage |
-| Clockwork Workshop | Turning gears |
-| Rhona's Secret Lab | Switches that flip platforms on and off |
-| Observatory Stairs | The longest climb in the game |
+| Behind the Seven Locks (0,5) | A wall that's only pretending (Animal Well), and a fake-walled nook with a golden firefly |
+| The Clockwork Workshop (0,4) | Jump flips gravity, so Isaac walks the ceiling (VVVVVV). Grumpy cogs |
+| Rhona's Secret Lab (-1,4) | Floor levers swap the blue and pink blocks (Manic Miner) |
+| The Observatory Stairs (-1,3) | Crumbling and blinking shelves, a lift, bats |
 | The Observatory | The Shadow at Dusk. Use every firefly to light the great lantern |
 
 ## Progress
@@ -128,7 +128,10 @@ With 60 rooms, 5 minutes is too short. In the full game the sun takes about 40 m
   - Gerald the raccoon won't leave the Outhouse until he gets a new comic (in the Treehouse). He swaps it for the sixth key. The seventh key is in the Dusty Rafters. All seven keys can now be found.
   - Ways in: the Front Porch's right door, the Balcony's right door (to the Outhouse), and the Window Nobody Opens' right door (to the Rafters).
   - The evening is now 35 minutes long to cover the extra rooms.
-- Not built yet from the upstairs and attic lists: Spider Corner's sagging webs are plain web shelves for now.
+- **Batch 5 (done, 2026-10-11):** the secret area and the finale. 60 rooms, 418 fireflies and 17 golden fireflies.
+  - All seven keys open the Door With Seven Locks (1,5). Its left doorway leads up through the five secret rooms to the Observatory.
+  - Catching the last firefly no longer ends the game. Isaac carries the jar to Rhona's great lantern in the Observatory; the fireflies stream in, the Shadow at Dusk melts away and the game is won.
+  - Polish: Lint the sock monster in Where Lost Socks Go swaps an extra heart for the stripy sock in the Laundry; the Umbrella floats as a boat in the Flooded Cellar (hold down to dive); vines hang from the woods hooks with a Tarzan yell when swinging; Spider Corner's webs sag under Isaac; the win screen shows a "Best fails" flipbook of Isaac's bumps.
 - Reachability check: `node check-rooms.js` (reads index.html directly).
 
 ## How it gets built
