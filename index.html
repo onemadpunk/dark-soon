@@ -158,14 +158,19 @@ kbd {
 }
 @media (orientation: landscape) and (max-height: 520px) {
   header, .bar { display: none; }
-  .wrap { max-width: none; padding: 4px max(8px, env(safe-area-inset-right)) 4px max(8px, env(safe-area-inset-left)); }
-  .stage { width: auto; height: calc(100dvh - 8px); max-width: 100%; margin: 0 auto; }
+  body { margin: 0; }
+  .wrap { max-width: none; padding: 0; }
   #startText, .diff-note { display: none; }
   .overlay h2 { font-size: 2.6rem; }
   .overlay { gap: 8px; }
   .btn { font-size: 1.25rem; padding: 3px 20px 1px; }
   .touch button:not(.mid button) { width: 60px; height: 60px; }
 }
+.stage.fill { width: 100vw; height: 100vh; height: 100dvh; max-width: none; aspect-ratio: auto; border: 0; border-radius: 0; box-shadow: none; display: flex; align-items: center; justify-content: center; }
+.stage.fill canvas { height: auto; aspect-ratio: 640 / 390; }
+/* side-bar controls: the game sits in the middle and the thumbs get the space either side, off the picture */
+.touch.side .grp { position: absolute; }
+.touch.side .mid { flex-direction: column; }
 </style>
 
 <div class="wrap">
@@ -1905,6 +1910,38 @@ function fsLabel() {
   setTimeout(fitScale, 100);
 }
 const homeScreenApp = matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches || navigator.standalone;
+// When the game fills a wide screen (full screen, home-screen app, or a phone held sideways), shrink it just enough to
+// leave a strip down each side, and put the touch buttons in those strips so thumbs never cover Isaac.
+function layoutTouch() {
+  const touchOn = touchUI.classList.contains('on');
+  const fill = !!fsNow() || homeScreenApp || (touchOn && innerWidth > innerHeight && innerHeight <= 520);
+  stage.classList.toggle('fill', fill);
+  const side = fill && touchOn;
+  touchUI.classList.toggle('side', side);
+  const groups = touchUI.querySelectorAll('.grp');
+  groups.forEach(g => g.removeAttribute('style'));
+  if (!side) { canvas.style.width = fill ? `min(100vw, calc(100dvh * 640 / 390))` : ''; canvas.style.marginBottom = ''; return; }
+  const W = stage.clientWidth, H = stage.clientHeight;
+  const btn = Math.max(52, Math.min(76, Math.round(Math.min(W, H) * 0.15))), strip = btn * 2 + 34, pad = Math.max(8, Math.min(W, H) * 0.04);
+  // two ways to keep the buttons off the picture: strips down the sides (phones), or a row underneath (tablets). Use whichever leaves the game bigger.
+  const sideW = Math.min(W - strip * 2, H * 640 / 390), row = btn + pad * 2, belowW = Math.min(W, (H - row) * 640 / 390);
+  const below = belowW > sideW, cw = below ? belowW : sideW;
+  canvas.style.width = cw + 'px';
+  canvas.style.marginBottom = below ? row + 'px' : '';
+  const gut = below ? 0 : (W - cw) / 2;
+  const [left, mid, right] = groups;
+  for (const b of touchUI.querySelectorAll('.grp:not(.mid) button')) { b.style.width = b.style.height = btn + 'px'; }
+  const edge = below ? Math.max(pad, (W - cw) / 2 + pad) : (gut - (btn * 2 + 10)) / 2;
+  Object.assign(left.style, { left: edge + 'px', bottom: pad + 'px' });
+  Object.assign(right.style, { right: edge + 'px', bottom: pad + 'px' });
+  if (below) Object.assign(mid.style, { left: '50%', transform: 'translateX(-50%)', bottom: pad + (btn - 42) / 2 + 'px', flexDirection: 'row', alignSelf: 'auto' });
+  else Object.assign(mid.style, { right: (gut - 42) / 2 + 'px', top: pad + 'px', alignSelf: 'auto' });
+  setTimeout(fitScale, 50);
+}
+addEventListener('resize', layoutTouch);
+document.addEventListener('fullscreenchange', layoutTouch); document.addEventListener('webkitfullscreenchange', layoutTouch);
+addEventListener('touchstart', () => setTimeout(layoutTouch, 0), { once: true, passive: true });
+layoutTouch();
 if (fsReq && !homeScreenApp) {
   for (const id of ['fullBtn', 'fullBtn2', 'tFull']) document.getElementById(id).addEventListener('click', toggleFull);
   document.addEventListener('fullscreenchange', fsLabel); document.addEventListener('webkitfullscreenchange', fsLabel);
