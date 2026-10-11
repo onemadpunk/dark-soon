@@ -178,6 +178,10 @@ kbd {
 .knob { position: absolute; left: 50%; top: 50%; width: 46%; height: 46%; margin: -23% 0 0 -23%; border-radius: 50%;
   border: 3px solid rgba(28,20,36,.85); background: rgba(247,234,217,.45); transition: transform .08s; }
 .stick.l .knob, .stick.r .knob { background: rgba(255,184,77,.6); transition: none; }
+.touch .grp { align-items: center; }
+/* jump (and the umbrella glide) is the button you use most, so it's the big one, nearest the middle */
+.touch:not(.side) #tJump { width: 88px; height: 88px; font-size: 32px; }
+.touch:not(.side) #tDown { width: 56px; height: 56px; font-size: 18px; }
 </style>
 
 <div class="wrap">
@@ -198,8 +202,8 @@ kbd {
         <button id="tFull" class="fsBtn" aria-label="Full screen">⛶</button>
       </div>
       <div class="grp">
-        <button id="tDown" aria-label="Drop down">▼</button>
         <button id="tJump" aria-label="Jump">▲</button>
+        <button id="tDown" aria-label="Drop down">▼</button>
       </div>
     </div>
     <div class="overlay" id="startScreen">
@@ -1938,9 +1942,10 @@ function layoutTouch() {
   touchUI.classList.toggle('side', side);
   const groups = touchUI.querySelectorAll('.grp');
   groups.forEach(g => g.removeAttribute('style')); stickEl.removeAttribute('style');
+  ['tJump', 'tDown'].forEach(id => document.getElementById(id).removeAttribute('style'));
   if (!side) { canvas.style.width = fill ? `min(100vw, calc(100dvh * 640 / 390))` : ''; canvas.style.marginBottom = ''; return; }
   const W = stage.clientWidth, H = stage.clientHeight;
-  const btn = Math.max(52, Math.min(76, Math.round(Math.min(W, H) * 0.15))), stickD = Math.round(btn * 1.8), strip = Math.max(stickD, btn * 2 + 10) + 24, pad = Math.max(8, Math.min(W, H) * 0.04);
+  const btn = Math.max(52, Math.min(76, Math.round(Math.min(W, H) * 0.15))), stickD = Math.round(btn * 1.8), jumpD = Math.round(btn * 1.4), downD = Math.round(btn * 0.85), rightW = jumpD + downD + 10, strip = Math.max(stickD, rightW) + 24, pad = Math.max(8, Math.min(W, H) * 0.04);
   // two ways to keep the buttons off the picture: strips down the sides (phones), or a row underneath (tablets). Use whichever leaves the game bigger.
   const sideW = Math.min(W - strip * 2, H * 640 / 390), row = stickD + pad * 2, belowW = Math.min(W, (H - row) * 640 / 390);
   const below = belowW > sideW, cw = below ? belowW : sideW;
@@ -1948,11 +1953,13 @@ function layoutTouch() {
   canvas.style.marginBottom = below ? row + 'px' : '';
   const gut = below ? 0 : (W - cw) / 2;
   const [left, mid, right] = groups;
-  for (const b of touchUI.querySelectorAll('.grp:not(.mid) button')) { b.style.width = b.style.height = btn + 'px'; }
+  const jb = document.getElementById('tJump'), db = document.getElementById('tDown');
+  jb.style.width = jb.style.height = jumpD + 'px'; jb.style.fontSize = Math.round(jumpD * 0.38) + 'px';
+  db.style.width = db.style.height = downD + 'px'; db.style.fontSize = Math.round(downD * 0.32) + 'px';
   stickEl.style.width = stickEl.style.height = stickD + 'px';
-  const edge = below ? Math.max(pad, (W - cw) / 2 + pad) : (gut - (btn * 2 + 10)) / 2;
+  const edge = below ? Math.max(pad, (W - cw) / 2 + pad) : (gut - rightW) / 2;
   Object.assign(left.style, { left: (below ? edge : (gut - stickD) / 2) + 'px', bottom: pad + 'px' });
-  Object.assign(right.style, { right: edge + 'px', bottom: pad + (stickD - btn) / 2 + 'px' });
+  Object.assign(right.style, { right: edge + 'px', bottom: pad + (stickD - jumpD) / 2 + 'px' });
   if (below) Object.assign(mid.style, { left: '50%', transform: 'translateX(-50%)', bottom: pad + (stickD - 42) / 2 + 'px', flexDirection: 'row', alignSelf: 'auto' });
   else Object.assign(mid.style, { right: (gut - 42) / 2 + 'px', top: pad + 'px', alignSelf: 'auto' });
   setTimeout(fitScale, 50);
