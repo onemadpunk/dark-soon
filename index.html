@@ -4222,12 +4222,13 @@ addEventListener('pagehide', () => { if (running) save(); });
 // ---------- Scoreboard (Supabase) ----------
 // Paste the two codes from Supabase (Project Settings > API) here. Both are safe in a public game: the database only
 // lets players add a play or a score and read the scores (see scoreboard/supabase-setup.sql). Empty = no scoreboard.
-const SCOREBOARD = { url: '', key: '' };
+const SCOREBOARD = { url: 'https://qgwmplzouwbsbauwnapk.supabase.co', key: 'sb_publishable_7M1g0XmfWrLooKMPiXdFbw_215YLPqI' };
 const scoresOn = !!(SCOREBOARD.url && SCOREBOARD.key);
 function sb(path, body) {
   return fetch(SCOREBOARD.url.replace(/\/$/, '') + '/rest/v1/' + path, {
     method: body ? 'POST' : 'GET', cache: 'no-store',
-    headers: { apikey: SCOREBOARD.key, Authorization: 'Bearer ' + SCOREBOARD.key, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+    headers: Object.assign({ apikey: SCOREBOARD.key, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      SCOREBOARD.key.startsWith('eyJ') ? { Authorization: 'Bearer ' + SCOREBOARD.key } : {}),
     body: body ? JSON.stringify(body) : undefined,
   }).then(r => { if (!r.ok) throw new Error(r.status); return r.status === 204 || r.status === 201 ? null : r.json(); });
 }
