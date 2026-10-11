@@ -1,3 +1,4 @@
+<meta charset="utf-8">
 <title>Dark Soon</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <link rel="manifest" href="manifest.webmanifest">
@@ -4123,6 +4124,8 @@ document.getElementById('playBtn').addEventListener('click', () => { clearSave()
 document.getElementById('againBtn').addEventListener('click', () => { clearSave(); begin(false); });
 addEventListener('keydown', e => { if (!running && e.code === 'Enter') begin(!!loadSave()); });
 addEventListener('pagehide', () => { if (running) save(); });
+// play offline: keep a copy of the game on the device (only on the real website, not in previews)
+if ('serviceWorker' in navigator && location.protocol === 'https:' && !/claude|anthropic/.test(location.hostname)) navigator.serviceWorker.register('sw.js').catch(() => {});
 
 const fontsReady = document.fonts ? Promise.race([document.fonts.load(`20px ${DISPLAY}`), new Promise(r => setTimeout(r, 1500))]) : Promise.resolve();
 fontsReady.then(() => {
