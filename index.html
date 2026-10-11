@@ -70,6 +70,16 @@ header p { margin: 0; color: var(--ink-dim); max-width: 48ch; }
   -webkit-user-select: none;
 }
 canvas { display: block; width: 100%; height: 100%; }
+.board { list-style: none; margin: 0; padding: 0; min-width: min(320px, 80vw); font-size: 1.05rem; }
+.board li { display: flex; gap: 12px; justify-content: space-between; padding: 3px 10px; border-radius: 6px; }
+.board li:nth-child(odd) { background: rgba(255,255,255,.06); }
+.board li.me { background: rgba(255,200,90,.25); }
+.board .who { font-family: var(--font-display); color: var(--amber); letter-spacing: .1em; min-width: 3.2em; text-align: left; }
+.board .gold { opacity: .8; min-width: 3em; text-align: right; }
+.score-form { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.score-form input { width: 4.2em; font: inherit; font-size: 1.4rem; text-align: center; text-transform: uppercase; letter-spacing: .15em; padding: 2px 4px; border-radius: 8px; border: 2px solid #1c1424; background: #f6ecd8; color: #2a1d33; }
+.score-msg { margin: 0; min-height: 1.2em; font-size: .9rem; }
+@media (max-height: 520px) { .board { font-size: .85rem; } .board li { padding: 1px 8px; } }
 .credit { margin: 4px 0 0; font-size: .8rem; color: var(--ink-dim); letter-spacing: .02em; }
 .credit b { color: var(--amber); font-family: var(--font-display); font-weight: 400; font-size: 1.1rem; letter-spacing: 0; }
 .fails { display: flex; flex-direction: column; align-items: center; gap: 4px; }
@@ -231,14 +241,31 @@ kbd {
         <button class="btn" id="continueBtn" hidden>Continue</button>
         <button class="btn" id="playBtn">New game</button>
         <button class="btn alt fsBtn" id="fullBtn">Full screen</button>
+        <button class="btn alt" id="scoresBtn" hidden>Scores</button>
       </div>
       <p class="credit">A <b>one mad punk</b> game<br>music by one_mad_punk</p>
       </div>
     </div>
     <div class="rotate" aria-live="polite"><div class="phone"></div>Turn your phone sideways to play</div>
+    <div class="overlay" id="scoresScreen" hidden>
+      <h2>Scoreboard</h2>
+      <div class="diff" role="group" aria-label="Scoreboard difficulty">
+        <button data-board="easy" aria-pressed="false">Easy</button>
+        <button data-board="medium" aria-pressed="true">Medium</button>
+        <button data-board="hard" aria-pressed="false">Hard</button>
+      </div>
+      <ol id="boardList" class="board"></ol>
+      <p id="playCount" class="credit"></p>
+      <div class="btns"><button class="btn" id="scoresClose">Back</button></div>
+    </div>
     <div class="overlay" id="winScreen" hidden>
       <h2 id="winTitle">Lanterns lit!</h2>
       <p id="winText">Every firefly is back.</p>
+      <form id="scoreForm" class="score-form" hidden autocomplete="off">
+        <label for="initials">Put your initials on the scoreboard</label>
+        <div><input id="initials" maxlength="3" autocapitalize="characters" spellcheck="false" placeholder="ABC" aria-label="Three letter initials"> <button class="btn" id="sendScore" type="submit">Send</button></div>
+        <p id="scoreMsg" class="score-msg"></p>
+      </form>
       <div id="fails" class="fails"></div>
       <div class="btns"><button class="btn" id="againBtn">Play again</button></div>
       <p class="credit">A <b>one mad punk</b> game &middot; thanks for playing!</p>
@@ -1851,7 +1878,7 @@ function updateBeanHint(dt) {
 let banner = { text: '', t: 0 };
 let fade = 0, fadeDir = 0, pendingRespawn = false;
 let finale = null; // the great lantern being lit at the very end
-let running = false, mapOpen = false, elapsed = 0, time = 0, darkAnnounced = false;
+let running = false, mapOpen = false, playTime = 0, elapsed = 0, time = 0, darkAnnounced = false;
 const dusk = () => Math.min(1, Math.max(0, elapsed / DUSK_SECONDS));
 
 // ---------- Saving (only in this browser) ----------
@@ -1860,7 +1887,7 @@ function save() {
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify({
       collected: [...collected], have: [...have], visited: [...visited], lit: [...litRooms], gold: [...goldGot],
-      checkpoint, elapsed: Math.round(elapsed), diff: diffKey,
+      checkpoint, elapsed: Math.round(elapsed), playTime: Math.round(playTime), diff: diffKey,
     }));
   } catch (e) {}
 }
@@ -1922,6 +1949,7 @@ function startGame(fromSave) {
   applyGates();
   checkpoint = s && s.checkpoint && ROOMS[s.checkpoint.key] ? s.checkpoint : { key: START, x: 3 * T, y: 16 * T - 26 };
   elapsed = s ? s.elapsed || 0 : 0;
+  playTime = s ? s.playTime || s.elapsed || 0 : 0;
   darkAnnounced = dusk() >= 1;
   applyLamps();
   Object.assign(p, { swing: null, x: checkpoint.x, y: checkpoint.y, vx: 0, vy: 0, face: 1, hearts: DIFF.hearts, inv: 0, fallTop: checkpoint.y });
@@ -1963,6 +1991,7 @@ function padButtonAt(gx, gy) {
   return -1;
 }
 addEventListener('keydown', e => {
+  if (e.target && e.target.tagName === 'INPUT') return; // typing initials
   if (keypad) {
     e.preventDefault();
     if (/^Digit\d$|^Numpad\d$/.test(e.code)) padPress(e.code.slice(-1));
@@ -2235,7 +2264,7 @@ function update(dt) {
   }
   if (!running || mapOpen) return;
   if (keypad) { keypad.t += dt; keypad.wrong = Math.max(0, keypad.wrong - dt); for (const k in keys) keys[k] = false; return; }
-  elapsed += dt;
+  elapsed += dt; playTime += dt;
   roomT += dt;
   updateBeanHint(dt);
   updateFinale(dt);
@@ -2730,6 +2759,7 @@ function win() {
       (beatDark ? ', before the sun even went down. Bean is very proud.' : '. The cabin is cosy and bright again, and Bean is very proud.') +
       ` You found ${goldGot.size} of ${GOLD_TOTAL} golden fireflies on ${DIFF.name}.`;
     showFails();
+    scoreReady(Math.round(playTime), goldGot.size, diffKey);
     document.getElementById('winScreen').hidden = false;
   }, 900);
 }
@@ -4183,12 +4213,77 @@ document.querySelectorAll('.diff button').forEach(b => b.addEventListener('click
 }));
 if (!DIFFS[pickedDiff]) pickedDiff = 'medium';
 showDiff();
-function begin(fromSave) { audioInit(); running = true; mapOpen = false; startGame(fromSave); startScreen.hidden = true; winScreen.hidden = true; }
+function begin(fromSave) { audioInit(); running = true; mapOpen = false; startGame(fromSave); startScreen.hidden = true; winScreen.hidden = true; document.getElementById('scoresScreen').hidden = true; }
 continueBtn.addEventListener('click', () => begin(true));
-document.getElementById('playBtn').addEventListener('click', () => { clearSave(); setDifficulty(pickedDiff); begin(false); });
-document.getElementById('againBtn').addEventListener('click', () => { clearSave(); begin(false); });
-addEventListener('keydown', e => { if (!running && e.code === 'Enter') begin(!!loadSave()); });
+document.getElementById('playBtn').addEventListener('click', () => { clearSave(); setDifficulty(pickedDiff); begin(false); logPlay(diffKey); });
+document.getElementById('againBtn').addEventListener('click', () => { clearSave(); begin(false); logPlay(diffKey); });
+addEventListener('keydown', e => { if (!running && e.code === 'Enter' && !(e.target && e.target.tagName === 'INPUT') && document.getElementById('scoresScreen').hidden) begin(!!loadSave()); });
 addEventListener('pagehide', () => { if (running) save(); });
+// ---------- Scoreboard (Supabase) ----------
+// Paste the two codes from Supabase (Project Settings > API) here. Both are safe in a public game: the database only
+// lets players add a play or a score and read the scores (see scoreboard/supabase-setup.sql). Empty = no scoreboard.
+const SCOREBOARD = { url: '', key: '' };
+const scoresOn = !!(SCOREBOARD.url && SCOREBOARD.key);
+function sb(path, body) {
+  return fetch(SCOREBOARD.url.replace(/\/$/, '') + '/rest/v1/' + path, {
+    method: body ? 'POST' : 'GET', cache: 'no-store',
+    headers: { apikey: SCOREBOARD.key, Authorization: 'Bearer ' + SCOREBOARD.key, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+    body: body ? JSON.stringify(body) : undefined,
+  }).then(r => { if (!r.ok) throw new Error(r.status); return r.status === 204 || r.status === 201 ? null : r.json(); });
+}
+function logPlay(diff) { if (scoresOn) sb('plays', { diff }).catch(() => {}); }
+const clock = sec => { const h = Math.floor(sec / 3600), m = Math.floor(sec / 60) % 60, s = sec % 60; return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(s).padStart(2, '0'); };
+let boardDiff = 'medium', myScore = null;
+function showBoard(diff, listEl) {
+  boardDiff = diff;
+  document.querySelectorAll('[data-board]').forEach(b => b.setAttribute('aria-pressed', b.dataset.board === diff));
+  listEl.innerHTML = '<li>Loading...</li>';
+  sb(`scores?select=initials,seconds,golden,created_at&diff=eq.${diff}&order=seconds.asc,created_at.asc&limit=10`).then(rows => {
+    listEl.innerHTML = '';
+    if (!rows.length) { listEl.innerHTML = '<li>No times yet. Be the first!</li>'; return; }
+    rows.forEach((r, i) => {
+      const li = document.createElement('li');
+      if (myScore && myScore.diff === diff && r.initials === myScore.initials && r.seconds === myScore.seconds) li.className = 'me';
+      li.innerHTML = `<span>${i + 1}.</span><span class="who"></span><span>${clock(r.seconds)}</span><span class="gold">✦ ${r.golden}</span>`;
+      li.querySelector('.who').textContent = r.initials;
+      listEl.appendChild(li);
+    });
+  }).catch(() => { listEl.innerHTML = "<li>Can't reach the scoreboard right now.</li>"; });
+}
+function openScores() {
+  document.getElementById('scoresScreen').hidden = false; startScreen.hidden = true;
+  showBoard(boardDiff, document.getElementById('boardList'));
+  const pc = document.getElementById('playCount'); pc.textContent = '';
+  sb('rpc/play_count', {}).then(n => { pc.textContent = `Dark Soon has been played ${Number(n).toLocaleString()} times.`; }).catch(() => {});
+}
+function scoreReady(seconds, golden, diff) { // the win screen offers a place on the board
+  const form = document.getElementById('scoreForm');
+  form.hidden = !scoresOn; if (!scoresOn) return;
+  form.dataset.seconds = seconds; form.dataset.golden = golden; form.dataset.diff = diff;
+  document.getElementById('sendScore').disabled = false;
+  document.getElementById('scoreMsg').textContent = `Your time: ${clock(seconds)}`;
+}
+if (scoresOn) {
+  document.getElementById('scoresBtn').hidden = false;
+  document.getElementById('scoresBtn').addEventListener('click', openScores);
+  document.getElementById('scoresClose').addEventListener('click', () => { document.getElementById('scoresScreen').hidden = true; startScreen.hidden = false; });
+  document.querySelectorAll('[data-board]').forEach(b => b.addEventListener('click', () => showBoard(b.dataset.board, document.getElementById('boardList'))));
+  const ini = document.getElementById('initials');
+  ini.addEventListener('input', () => { ini.value = ini.value.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 3); });
+  document.getElementById('scoreForm').addEventListener('submit', e => {
+    e.preventDefault();
+    const form = e.target, msg = document.getElementById('scoreMsg'), initials = ini.value;
+    if (initials.length !== 3) { msg.textContent = 'Three letters, please!'; return; }
+    const row = { initials, diff: form.dataset.diff, seconds: +form.dataset.seconds, golden: +form.dataset.golden };
+    document.getElementById('sendScore').disabled = true; msg.textContent = 'Sending...';
+    sb('scores', row).then(() => {
+      myScore = row; form.hidden = true;
+      winScreen.hidden = true; document.getElementById('scoresScreen').hidden = false;
+      boardDiff = row.diff; openScores();
+    }).catch(() => { msg.textContent = "Couldn't reach the scoreboard. Try again in a bit."; document.getElementById('sendScore').disabled = false; });
+  });
+}
+
 // play offline: keep a copy of the game on the device (only on the real website, not in previews)
 if ('serviceWorker' in navigator && location.protocol === 'https:' && !/claude|anthropic/.test(location.hostname)) navigator.serviceWorker.register('sw.js').catch(() => {});
 

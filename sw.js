@@ -1,6 +1,6 @@
 // Dark Soon offline helper: keeps a copy of the game on the device so it plays without the internet.
 // Each visit shows the saved copy at once and quietly fetches any update for next time.
-const CACHE = 'dark-soon-v4';
+const CACHE = 'dark-soon-v5';
 const CORE = ['./', 'index.html', 'theme.mp3', 'music-house.mp3', 'music-woods.mp3', 'music-finale.mp3', 'music-cellar.mp3', 'music-roof.mp3', 'manifest.webmanifest', 'icon-180.png', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', e => {
@@ -31,6 +31,8 @@ async function audioRange(req) { // iPhones and iPads ask for music in slices; s
 self.addEventListener('fetch', e => {
   const req = e.request;
   if (req.method !== 'GET' || !req.url.startsWith('http')) return;
+  const host = new URL(req.url).hostname; // only the game's own files and its fonts; the scoreboard always goes to the internet
+  if (host !== self.location.hostname && !/fonts\.(googleapis|gstatic)\.com$/.test(host)) return;
   if (req.headers.get('range') && req.url.endsWith('.mp3')) return e.respondWith(audioRange(req));
   e.respondWith(fromCache(req));
 });
