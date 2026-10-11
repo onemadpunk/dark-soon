@@ -227,9 +227,9 @@ const OUT = '#1c1424';
 // Difficulty. Medium is the original Manic Miner-style game; Easy and Hard bend it either way.
 // Moving platforms keep the same speed on every level so every room stays possible.
 const DIFFS = {
-  easy:   { name: 'Easy',   hearts: 5, enemy: 0.85, fall: 14 * 20, dusk: 3000, lantern: 40, forgive: 3, note: '5 hearts, slower creatures, a longer sunset and only big falls hurt.' },
-  medium: { name: 'Medium', hearts: 3, enemy: 1.15, fall: 9 * 20,  dusk: 2100, lantern: 20, forgive: 0, note: 'The proper game: 3 hearts and Manic Miner rules.' },
-  hard:   { name: 'Hard',   hearts: 2, enemy: 1.4,  fall: 9 * 20,  dusk: 1500, lantern: 10, forgive: 0, note: '2 hearts, fast creatures and a short sunset. Good luck!' },
+  easy:   { name: 'Easy',   hearts: 5, enemy: 0.85, fall: 14 * 20, dusk: 3000, lantern: 40, hint: 8, forgive: 3, note: '5 hearts, slower creatures, a longer sunset and only big falls hurt.' },
+  medium: { name: 'Medium', hearts: 3, enemy: 1.15, fall: 9 * 20,  dusk: 2100, lantern: 20, hint: 15, forgive: 0, note: 'The proper game: 3 hearts and Manic Miner rules.' },
+  hard:   { name: 'Hard',   hearts: 2, enemy: 1.4,  fall: 9 * 20,  dusk: 1500, lantern: 10, hint: 25, forgive: 0, note: '2 hearts, fast creatures and a short sunset. Good luck!' },
 };
 let DIFF = DIFFS.medium, diffKey = 'medium';
 let DUSK_SECONDS = DIFF.dusk;       // minutes of evening for the cabin and the woods
@@ -1671,6 +1671,22 @@ let roomEntry = null, entrySettled = false, pendingReset = false; // a bump send
 let particles = [];
 let trail = [];
 let frogHop = 0;
+// Bean's hint: after a while in a room without catching anything, he croaks and flicks his tongue at the nearest firefly left.
+let sinceCatch = 0, beanHint = null;
+const HINT_TIME = 1.1;
+function beanSpot() { const tp = trail[Math.max(0, trail.length - 40)]; return p.swing || !tp ? { x: p.x + p.w / 2, y: p.y + 2 } : tp; }
+function updateBeanHint(dt) {
+  if (beanHint) { beanHint.t += dt; if (beanHint.t > HINT_TIME + 1) beanHint = null; }
+  const left = room.flies.filter(f => !collected.has(f.id));
+  if (!left.length || fadeDir || keypad) { sinceCatch = 0; return; }
+  sinceCatch += dt;
+  if (sinceCatch < DIFF.hint || beanHint) return;
+  const b = beanSpot();
+  let best = null, bd = 1e9;
+  for (const f of left) { const d = Math.hypot(f.x - b.x, f.y - b.y); if (d < bd) { bd = d; best = f; } }
+  beanHint = { f: best, t: 0 }; sinceCatch = DIFF.hint - 10; // and again every 10 seconds
+  frogHop = .5; sfx.ribbit(); setTimeout(sfx.tongue, 250);
+}
 let banner = { text: '', t: 0 };
 let fade = 0, fadeDir = 0, pendingRespawn = false;
 let running = false, mapOpen = false, elapsed = 0, time = 0, darkAnnounced = false;
@@ -1707,7 +1723,7 @@ function restartRoom() {
 }
 function enterRoom(key) {
   if (p.swing) { p.swing = null; p.wallLock = .3; }
-  roomKey = key; room = ROOMS[key];
+  roomKey = key; room = ROOMS[key]; sinceCatch = 0; beanHint = null;
   if (!room.layer) buildLayer(room);
   restartRoom();
   roomEntry = { x: p.x, y: p.y, vx: 0, vy: p.vy, face: p.face }; entrySettled = false;
@@ -1939,6 +1955,7 @@ function update(dt) {
   if (keypad) { keypad.t += dt; keypad.wrong = Math.max(0, keypad.wrong - dt); for (const k in keys) keys[k] = false; return; }
   elapsed += dt;
   roomT += dt;
+  updateBeanHint(dt);
   if (dusk() >= 1 && !darkAnnounced) { darkAnnounced = true; sfx.dark(); banner = { text: "It's dark! The cabin is waking up...", t: 3 }; }
   const cleared = room.flies.every(f => collected.has(f.id));
 
@@ -2085,7 +2102,7 @@ function update(dt) {
     if (collected.has(f.id)) continue;
     const fx = f.x + Math.sin(f.phase * 1.7) * 3, fy = f.y + Math.sin(f.phase * 2.3) * 4;
     if (touching(fx, fy)) {
-      collected.add(f.id); sfx.catch(); setTimeout(sfx.ribbit, 220); frogHop = .5;
+      collected.add(f.id); sfx.catch(); setTimeout(sfx.ribbit, 220); frogHop = .5; sinceCatch = 0; beanHint = null;
       burst(fx, fy, 18, '#e9ff8a', 110, .8);
       save();
       if (collected.size === TOTAL) win();
@@ -2938,7 +2955,31 @@ function drawFrog() {
   if (p.swing) tp = tq = { x: p.x + p.w / 2, y: p.y + 2, face: p.face };
   const moving = Math.abs(tp.x - tq.x) > .5;
   const hop = (moving ? Math.abs(Math.sin(time * 11)) * 4 : 0) + (frogHop > 0 ? Math.sin((.5 - frogHop) / .5 * Math.PI) * 10 : 0);
-  ctx.save(); ctx.translate(tp.x, tp.y - hop); ctx.scale(tp.face, 1);
+  let face = tp.face;
+  if (beanHint && beanHint.t < HINT_TIME) {
+    const f = beanHint.f, fx = f.x + Math.sin(f.phase * 1.7) * 3, fy = f.y + Math.sin(f.phase * 2.3) * 4;
+    face = fx < tp.x ? -1 : 1;
+    const mx = tp.x + face * 5, my = tp.y - hop - 5;
+    const dx = fx - mx, dy = fy - my, dist = Math.hypot(dx, dy) || 1;
+    const k = Math.max(0, Math.sin(Math.min(1, (beanHint.t - .25) / (HINT_TIME - .25)) * Math.PI)); // shoots out, then snaps back
+    const len = Math.min(dist - 6, 90) * k;
+    if (len > 1) {
+      const ex = mx + dx / dist * len, ey = my + dy / dist * len;
+      ctx.lineCap = 'round'; ctx.strokeStyle = OUT; ctx.lineWidth = 4.2; ctx.beginPath(); ctx.moveTo(mx, my); ctx.lineTo(ex, ey); ctx.stroke();
+      ctx.strokeStyle = '#ff7a9c'; ctx.lineWidth = 2.6; ctx.stroke();
+      circle(ctx, ex, ey, 3); ink(ctx, '#ff7a9c', 1.1);
+      // if the firefly is further than the tongue can reach, a dotted trail carries on to it
+      if (dist - 6 > 90 && k > .6) {
+        ctx.fillStyle = `rgba(255,170,190,${(k - .6) * 2})`;
+        for (let d = len + 12; d < dist - 10; d += 10) { circle(ctx, mx + dx / dist * d, my + dy / dist * d, 1.6); ctx.fill(); }
+      }
+    }
+  }
+  if (beanHint) { // a ring pops round the firefly Bean is pointing at
+    const f = beanHint.f, fx = f.x + Math.sin(f.phase * 1.7) * 3, fy = f.y + Math.sin(f.phase * 2.3) * 4, a = Math.min(1, beanHint.t * 2, (HINT_TIME + 1 - beanHint.t) * 2);
+    ctx.strokeStyle = `rgba(255,190,210,${a * .9})`; ctx.lineWidth = 1.6; circle(ctx, fx, fy, 9 + Math.sin(beanHint.t * 9) * 2); ctx.stroke();
+  }
+  ctx.save(); ctx.translate(tp.x, tp.y - hop); ctx.scale(face, 1);
   ellipse(ctx, 0, hop, 6, 1.5); ctx.fillStyle = `rgba(0,0,0,${hop < 2 ? .25 : .1})`; ctx.fill();
   ellipse(ctx, -4, -2, 3, 2); ink(ctx, '#5bb35b', 1.1);
   ellipse(ctx, 0, -5, 7.5, 5.2); ink(ctx, '#6cc46a', 1.3);
