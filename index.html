@@ -275,18 +275,18 @@ function fitScale() {
   for (const k in ROOMS) ROOMS[k].layer = null; // rebuild room art at the new size
 }
 const OUT = '#1c1424';
-// Difficulty. Medium is the original Manic Miner-style game; Easy and Hard bend it either way.
+// Difficulty. Medium is the original game; Easy and Hard bend it either way.
 // Moving platforms keep the same speed on every level so every room stays possible.
 const DIFFS = {
   easy:   { name: 'Easy',   hearts: 5, enemy: 0.85, fall: 14 * 20, dusk: 3000, lantern: 40, hint: 8, forgive: 3, note: '5 hearts, slower creatures, a longer sunset and only big falls hurt.' },
-  medium: { name: 'Medium', hearts: 3, enemy: 1.15, fall: 9 * 20,  dusk: 2100, lantern: 20, hint: 15, forgive: 0, note: 'The proper game: 3 hearts and Manic Miner rules.' },
+  medium: { name: 'Medium', hearts: 3, enemy: 1.15, fall: 9 * 20,  dusk: 2100, lantern: 20, hint: 15, forgive: 0, note: 'The proper game: 3 hearts, and every bump starts the room again.' },
   hard:   { name: 'Hard',   hearts: 2, enemy: 1.4,  fall: 9 * 20,  dusk: 1500, lantern: 10, hint: 25, forgive: 0, note: '2 hearts, fast creatures and a short sunset. Good luck!' },
 };
 let DIFF = DIFFS.medium, diffKey = 'medium';
 let DUSK_SECONDS = DIFF.dusk;       // minutes of evening for the cabin and the woods
 let LANTERN_PUSHBACK = DIFF.lantern; // lighting a new lantern buys this many seconds of sun
 let ENEMY_SPEED = DIFF.enemy;       // how brisk the cabin's creatures are
-let FALL_HURT = DIFF.fall;          // falling further than this hurts (Manic Miner rules)
+let FALL_HURT = DIFF.fall;          // falling further than this hurts
 const PLATFORM_SPEED = 1.15;
 function setDifficulty(k) {
   diffKey = DIFFS[k] ? k : 'medium'; DIFF = DIFFS[diffKey];
@@ -1005,7 +1005,7 @@ const ROOM_DEFS = [
     enemies: [
       { kind: 'shadow', axis: 'x', a: 3 * T, b: 28 * T, y: 7 * T, speed: 22 },
     ] },
-  // ===== The woods (Amphibia country; Bean's Tongue swings from hooks) =====
+  // ===== The woods (Bean's Tongue swings from hooks) =====
   { key: '10,4', name: "Rhona's Garden", theme: 'garden', decor: [], outdoor: true,
     exits: { left: [13, 15], right: [13, 15] },
     plats: [[13, 4, 7], [10, 8, 11], [7, 4, 7], [4, 9, 13], [12, 14, 17], [9, 17, 20], [6, 15, 18], [3, 20, 24], [11, 22, 25], [8, 25, 28], [5, 27, 30]],
@@ -2193,7 +2193,7 @@ const sfx = {
   chime: () => [1319, 1760, 2093].forEach((f, i) => tone(f, .25, 'sine', .05, 0, i * .06)),
   thud: () => tone(90, .15, 'triangle', .06, -40),
   snap: () => tone(420, .07, 'square', .04, -300),
-  tarzan: () => [[392, .22], [523, .12], [392, .12], [523, .12], [392, .12], [587, .5]].reduce((t, [f, d]) => { tone(f, d + .05, 'sawtooth', .03, 0, t); tone(f * 1.01, d + .05, 'triangle', .04, 40, t); return t + d; }, .05),
+  yell: () => [[392, .22], [523, .12], [392, .12], [523, .12], [392, .12], [587, .5]].reduce((t, [f, d]) => { tone(f, d + .05, 'sawtooth', .03, 0, t); tone(f * 1.01, d + .05, 'triangle', .04, 40, t); return t + d; }, .05),
 };
 document.getElementById('muteBtn').addEventListener('click', e => { muted = !muted; e.target.textContent = 'Sound: ' + (muted ? 'off' : 'on'); musicSync(); });
 document.getElementById('musicBtn').addEventListener('click', e => { musicOn = !musicOn; e.target.textContent = 'Music: ' + (musicOn ? 'on' : 'off'); musicSync(); });
@@ -2319,7 +2319,7 @@ function update(dt) {
       const cx = p.x + p.w / 2, cy = p.y + p.h / 2, L = Math.max(40, Math.min(100, Math.hypot(cx - h.x, cy - h.y))), a = Math.atan2(cx - h.x, cy - h.y);
       p.swing = { h, L, a, w: (p.vx * Math.cos(a) - p.vy * Math.sin(a)) / L };
       p.jumpBuf = 0; p.wallSide = 0; sfx.tongue(); frogHop = .3;
-      if (THEMES[room.theme].style === 'woods' && time - lastYell > 6) { lastYell = time; sfx.tarzan(); }
+      if (THEMES[room.theme].style === 'woods' && time - lastYell > 6) { lastYell = time; sfx.yell(); }
     }
   }
 
@@ -2646,7 +2646,7 @@ function enemyBox(e) {
   return { x: e.pos - 8, y: floor ? y - h : y - 6, w: 16, h };
 }
 
-// Manic Miner rules: any bump sends Isaac back to the doorway of the room, and the room starts over.
+// Any bump sends Isaac back to the doorway of the room, and the room starts over.
 // Lose all your hearts and Isaac wakes at the last lantern. Fireflies already caught stay caught.
 function throwLever(g, lv) {
   SWITCH[g] = !SWITCH[g];
@@ -3605,7 +3605,7 @@ function drawIsaacVector() { // fallback until the sprites load: Isaac drawn wit
   for (const [hx, hy] of spikes) ctx.lineTo(hx + (hy < -32 ? flop : 0), hy);
   ctx.quadraticCurveTo(-3.6, -30.4, -4.6, -26.8); ctx.closePath(); ink(ctx, HAIR, 1.2);
   ctx.strokeStyle = '#8a5a30'; ctx.lineWidth = .8; ctx.beginPath(); ctx.moveTo(-4, -33); ctx.lineTo(-2.6, -37); ctx.moveTo(2.4, -33.6); ctx.lineTo(4, -37); ctx.stroke();
-  // Gravity Falls eyes: two big round whites that touch, with little dot pupils
+  // Cartoon eyes: two big round whites that touch, with little dot pupils
   circle(ctx, 1.8, -26.6, 2.6); ink(ctx, '#fff', .9);
   circle(ctx, 5.6, -26.8, 2.5); ink(ctx, '#fff', .9);
   const look = p.vy < -100 ? -.6 : p.vy > 200 ? .6 : 0;
