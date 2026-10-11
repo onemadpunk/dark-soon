@@ -4132,7 +4132,33 @@ function drawHUD() {
 
 // ---------- Loop ----------
 let last = performance.now(), acc = 0;
+// Game controllers (Xbox, PlayStation, Switch and cheap Bluetooth pads): the pad presses the same keys as the keyboard.
+// Stick or d-pad walks, A / cross jumps, B / circle drops, Start begins or plays again, Select / Back opens the map.
+const PAD_CODES = { l: 'ArrowLeft', r: 'ArrowRight', j: 'Space', d: 'ArrowDown', map: 'KeyM', start: 'Enter' };
+let padHeld = {}, padMode = false;
+function pollPads() {
+  const pads = navigator.getGamepads ? [...navigator.getGamepads()].filter(Boolean) : [];
+  if (!pads.length) return;
+  const now = {};
+  for (const g of pads) {
+    const b = i => g.buttons[i] && g.buttons[i].pressed, ax = g.axes[0] || 0, ay = g.axes[1] || 0;
+    now.l = now.l || b(14) || ax < -0.45;
+    now.r = now.r || b(15) || ax > 0.45;
+    now.j = now.j || b(0) || b(3) || b(12);
+    now.d = now.d || b(1) || b(13) || ay > 0.7;
+    now.map = now.map || b(8);
+    now.start = now.start || b(9) || (!running && b(0));
+  }
+  for (const k in PAD_CODES) {
+    if (!!now[k] === !!padHeld[k]) continue;
+    if (now[k] && !padMode) { padMode = true; touchUI.classList.remove('on'); layoutTouch(); } // a pad is in use: tidy the touch buttons away
+    dispatchEvent(new KeyboardEvent(now[k] ? 'keydown' : 'keyup', { code: PAD_CODES[k], cancelable: true }));
+  }
+  padHeld = now;
+}
+addEventListener('touchstart', () => { if (padMode) { padMode = false; touchUI.classList.add('on'); layoutTouch(); } }, { passive: true });
 function frame(now) {
+  pollPads();
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
   acc += dt;
   const STEP = 1 / 120;
