@@ -2113,7 +2113,7 @@ canvas.addEventListener('pointerdown', e => { if (mapOpen) mapOpen = false; canv
 let actx = null, muted = false;
 function audioInit() { if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} } if (actx && actx.state === 'suspended') actx.resume(); musicPlay(); }
 // Music by one_mad_punk, a track for each part of the house. Browsers only allow it to start after a tap or key press.
-const TRACKS = { house: 'music-house.mp3', attic: 'theme.mp3', woods: 'music-woods.mp3', secret: 'music-finale.mp3' };
+const TRACKS = { house: 'music-house.mp3', attic: 'theme.mp3', woods: 'music-woods.mp3', cellar: 'music-cellar.mp3', secret: 'music-finale.mp3' };
 const MUSIC_VOL = 0.35, tracks = {};
 let musicOn = true, trackName = 'house', music = null;
 function getTrack(name) {
@@ -2125,7 +2125,8 @@ function areaOf(key) { // which song goes with which room
   const [x, y] = key.split(',').map(Number);
   if (x < 0 || key === '0,5' || key === '0,4') return 'secret';
   if (x >= 10 && key !== '10,3') return 'woods';
-  if (y <= 2 || y >= 5) return 'attic'; // attic, roof and cellar
+  if (y >= 5) return 'cellar';
+  if (y <= 2) return 'attic'; // attic and roof
   return 'house';
 }
 function setTrack(name) { // fade the old song out and the new one in; each song remembers where it was
