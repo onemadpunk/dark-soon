@@ -87,6 +87,12 @@ canvas { display: block; width: 100%; height: 100%; }
 @media (max-width: 620px) { .hero-art { display: none; } }
 .overlay p { margin: 0; max-width: 44ch; color: var(--ink); font-size: clamp(.85rem, 2.2vw, 1.05rem); }
 .btns { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+.diff { display: flex; border: 3px solid var(--outline); border-radius: 10px; overflow: hidden; box-shadow: 0 4px 0 var(--outline); }
+.diff button { font-family: var(--font-display); font-size: 1.15rem; padding: 3px 16px 1px; background: rgba(247,234,217,.15); color: var(--ink); border: 0; cursor: pointer; }
+.diff button + button { border-left: 3px solid var(--outline); }
+.diff button[aria-pressed="true"] { background: var(--pine); color: #fff; }
+.diff button:focus-visible { outline: 3px solid var(--amber); outline-offset: -3px; }
+.diff-note { font-size: .85rem !important; color: var(--ink-dim) !important; min-height: 1.3em; }
 .btn {
   font-family: var(--font-display); font-size: 1.5rem; letter-spacing: .03em;
   padding: 4px 28px 2px; border-radius: 10px; cursor: pointer;
@@ -167,7 +173,13 @@ kbd {
       <img class="hero-art" id="heroArt" alt="Isaac with his blue guitar">
       <div class="start-col">
       <h2>Dark Soon</h2>
-      <p>The cabin's firefly lanterns keep its strange things sleepy, and the fireflies have escaped. Catch them all before the sun goes down. It's a tricky old house: any bump sends Isaac back to the doorway, and long falls hurt. Touch a lantern to save your spot and refill your hearts. Press <kbd>M</kbd> for the map.</p>
+      <p>The cabin's firefly lanterns keep its strange things sleepy, and the fireflies have escaped. Catch them all before the sun goes down. It's a tricky old house: a bump sends Isaac back to the doorway, and long falls hurt. Touch a lantern to save your spot and refill your hearts. Press <kbd>M</kbd> for the map.</p>
+      <div class="diff" role="group" aria-label="Difficulty">
+        <button data-diff="easy" aria-pressed="false">Easy</button>
+        <button data-diff="medium" aria-pressed="true">Medium</button>
+        <button data-diff="hard" aria-pressed="false">Hard</button>
+      </div>
+      <p class="diff-note" id="diffNote"></p>
       <div class="btns">
         <button class="btn" id="continueBtn" hidden>Continue</button>
         <button class="btn" id="playBtn">New game</button>
@@ -212,10 +224,23 @@ function fitScale() {
   for (const k in ROOMS) ROOMS[k].layer = null; // rebuild room art at the new size
 }
 const OUT = '#1c1424';
-const DUSK_SECONDS = 2100;      // 35 minutes of evening for the cabin and the woods
-const LANTERN_PUSHBACK = 20;    // lighting a new lantern buys this many seconds of sun
-const ENEMY_SPEED = 1.15;       // the cabin's creatures are brisk
-const FALL_HURT = 9 * 20;       // falling further than 9 tiles hurts (Manic Miner rules)
+// Difficulty. Medium is the original Manic Miner-style game; Easy and Hard bend it either way.
+// Moving platforms keep the same speed on every level so every room stays possible.
+const DIFFS = {
+  easy:   { name: 'Easy',   hearts: 5, enemy: 0.85, fall: 14 * 20, dusk: 3000, lantern: 40, forgive: 3, note: '5 hearts, slower creatures, a longer sunset and only big falls hurt.' },
+  medium: { name: 'Medium', hearts: 3, enemy: 1.15, fall: 9 * 20,  dusk: 2100, lantern: 20, forgive: 0, note: 'The proper game: 3 hearts and Manic Miner rules.' },
+  hard:   { name: 'Hard',   hearts: 2, enemy: 1.4,  fall: 9 * 20,  dusk: 1500, lantern: 10, forgive: 0, note: '2 hearts, fast creatures and a short sunset. Good luck!' },
+};
+let DIFF = DIFFS.medium, diffKey = 'medium';
+let DUSK_SECONDS = DIFF.dusk;       // minutes of evening for the cabin and the woods
+let LANTERN_PUSHBACK = DIFF.lantern; // lighting a new lantern buys this many seconds of sun
+let ENEMY_SPEED = DIFF.enemy;       // how brisk the cabin's creatures are
+let FALL_HURT = DIFF.fall;          // falling further than this hurts (Manic Miner rules)
+const PLATFORM_SPEED = 1.15;
+function setDifficulty(k) {
+  diffKey = DIFFS[k] ? k : 'medium'; DIFF = DIFFS[diffKey];
+  DUSK_SECONDS = DIFF.dusk; LANTERN_PUSHBACK = DIFF.lantern; ENEMY_SPEED = DIFF.enemy; FALL_HURT = DIFF.fall;
+}
 const SAVE_KEY = 'dark-soon-save-v3';
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const DISPLAY = '"Mystery Quest", Georgia, serif';
@@ -1657,7 +1682,7 @@ function save() {
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify({
       collected: [...collected], have: [...have], visited: [...visited], lit: [...litRooms], gold: [...goldGot],
-      checkpoint, elapsed: Math.round(elapsed),
+      checkpoint, elapsed: Math.round(elapsed), diff: diffKey,
     }));
   } catch (e) {}
 }
@@ -1705,6 +1730,7 @@ function applyGates() {
 function applyLamps() { Object.values(ROOMS).forEach(r => { r.lamp.lit = litRooms.has(r.key); }); }
 function startGame(fromSave) {
   const s = fromSave ? loadSave() : null;
+  if (s) setDifficulty(s.diff || 'medium');
   collected = new Set(s ? s.collected : []);
   have = new Set(s ? s.have : []);
   visited = new Set(s ? s.visited : []);
@@ -1716,7 +1742,7 @@ function startGame(fromSave) {
   elapsed = s ? s.elapsed || 0 : 0;
   darkAnnounced = dusk() >= 1;
   applyLamps();
-  Object.assign(p, { swing: null, x: checkpoint.x, y: checkpoint.y, vx: 0, vy: 0, face: 1, hearts: 3, inv: 0, fallTop: checkpoint.y });
+  Object.assign(p, { swing: null, x: checkpoint.x, y: checkpoint.y, vx: 0, vy: 0, face: 1, hearts: DIFF.hearts, inv: 0, fallTop: checkpoint.y });
   pendingReset = pendingRespawn = false; fade = 0; fadeDir = 0;
   particles = [];
   enterRoom(checkpoint.key);
@@ -1923,7 +1949,7 @@ function update(dt) {
       const on = p.mover === m && p.ground;
       m.pos = on ? Math.min(m.b, m.pos + (m.sinkSpeed || 45) * dt) : Math.max(m.a, m.pos - 70 * dt);
     } else {
-      m.pos += m.dir * m.speed * ENEMY_SPEED * dt;
+      m.pos += m.dir * m.speed * PLATFORM_SPEED * dt;
       if (m.pos > m.b) { m.pos = m.b; m.dir = -1; }
       if (m.pos < m.a) { m.pos = m.a; m.dir = 1; }
     }
@@ -2106,8 +2132,8 @@ function update(dt) {
       L.lit = true; litRooms.add(roomKey); sfx.lamp(); burst(L.x, L.y - 38, 20, '#ffcf7a', 90, .9, -40);
       elapsed = Math.max(0, elapsed - LANTERN_PUSHBACK);
       banner = { text: 'Lantern lit! The sun stays up a little longer.', t: 2.2 };
-    } else if (p.hearts < 3) { banner = { text: 'The lantern warms Isaac up. Hearts back!', t: 1.8 }; sfx.lamp(); }
-    p.hearts = 3;
+    } else if (p.hearts < DIFF.hearts) { banner = { text: 'The lantern warms Isaac up. Hearts back!', t: 1.8 }; sfx.lamp(); }
+    p.hearts = DIFF.hearts;
     if (checkpoint.key !== roomKey) { checkpoint = { key: roomKey, x: L.x - p.w / 2 + 14, y: L.y - p.h }; save(); }
   }
 
@@ -2130,12 +2156,13 @@ function update(dt) {
       continue;
     }
     const b = enemyBox(e);
-    if (p.inv <= 0 && b.x < p.x + p.w - 2 && b.x + b.w > p.x + 2 && b.y < p.y + p.h - 2 && b.y + b.h > p.y + 4) hurt(e);
+    const f = DIFF.forgive;
+    if (p.inv <= 0 && b.x + f < p.x + p.w - 2 && b.x + b.w - f > p.x + 2 && b.y + f < p.y + p.h - 2 && b.y + b.h - f > p.y + 4) hurt(e);
   }
   for (const s of shots) {
     s.x += s.vx * dt; s.t += dt;
     if (isSolid(tileAt(room, Math.floor(s.x / T), Math.floor(s.y / T))) || s.x < -10 || s.x > VW + 10) { s.dead = true; burst(s.x, s.y, 5, '#e85aa0', 50, .3); continue; }
-    if (p.inv <= 0 && s.x > p.x - 3 && s.x < p.x + p.w + 3 && s.y > p.y + 2 && s.y < p.y + p.h) { s.dead = true; hurt(); }
+    if (p.inv <= 0 && s.x > p.x - 3 + DIFF.forgive && s.x < p.x + p.w + 3 - DIFF.forgive && s.y > p.y + 2 && s.y < p.y + p.h) { s.dead = true; hurt(); }
   }
   shots = shots.filter(s => !s.dead);
 
@@ -2274,7 +2301,7 @@ function enemyBox(e) {
 }
 
 // Manic Miner rules: any bump sends Isaac back to the doorway of the room, and the room starts over.
-// Lose all three hearts and Isaac wakes at the last lantern. Fireflies already caught stay caught.
+// Lose all your hearts and Isaac wakes at the last lantern. Fireflies already caught stay caught.
 function hurt() {
   if (p.inv > 0 || fadeDir) return;
   p.hearts--; sfx.hurt();
@@ -2291,7 +2318,7 @@ function doRoomReset() {
 }
 function doRespawn() {
   pendingRespawn = false;
-  Object.assign(p, { swing: null, x: checkpoint.x, y: checkpoint.y, vx: 0, vy: 0, hearts: 3, inv: 1.2, fallTop: checkpoint.y, wallSide: 0, wallLock: 0 });
+  Object.assign(p, { swing: null, x: checkpoint.x, y: checkpoint.y, vx: 0, vy: 0, hearts: DIFF.hearts, inv: 1.2, fallTop: checkpoint.y, wallSide: 0, wallLock: 0 });
   enterRoom(checkpoint.key);
   banner = { text: 'Isaac had a funny dream...', t: 2 };
 }
@@ -2304,7 +2331,7 @@ function win() {
     document.getElementById('winTitle').textContent = beatDark ? 'Beat the dark!' : 'Lanterns lit!';
     document.getElementById('winText').textContent = `All ${TOTAL} fireflies from the cellar to the woods are caught` +
       (beatDark ? ', before the sun went down. Bean is very proud.' : '. It got dark, but the lanterns are glowing again.') +
-      ` You found ${goldGot.size} of ${GOLD_TOTAL} golden fireflies. The secret behind the old door comes next.`;
+      ` You found ${goldGot.size} of ${GOLD_TOTAL} golden fireflies on ${DIFF.name}. The secret behind the old door comes next.`;
     document.getElementById('winScreen').hidden = false;
   }, 900);
 }
@@ -3493,13 +3520,13 @@ function drawHUD() {
   ctx.save();
   ctx.fillStyle = '#2a1d33'; ctx.fillRect(0, 0, VW, HUD_H);
   ctx.fillStyle = OUT; ctx.fillRect(0, HUD_H - 2, VW, 2);
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < DIFF.hearts; i++) {
     const hx = 16 + i * 18, hy = 12;
     ctx.beginPath(); ctx.moveTo(hx, hy + 6); ctx.bezierCurveTo(hx - 10, hy - 1, hx - 4.5, hy - 9, hx, hy - 3); ctx.bezierCurveTo(hx + 4.5, hy - 9, hx + 10, hy - 1, hx, hy + 6);
     ink(ctx, i < p.hearts ? '#ff6f91' : '#4a3a50', 1.3);
   }
   // sunset meter: the sun slides along as the evening runs out
-  const d = dusk(), mx = 76, mw = 80;
+  const d = dusk(), mx = 22 + DIFF.hearts * 18, mw = 80;
   rrect(ctx, mx, 8, mw, 9, 4.5); ink(ctx, '#2a1f38', 1.3);
   ctx.save(); rrect(ctx, mx, 8, mw, 9, 4.5); ctx.clip();
   const mg = ctx.createLinearGradient(mx, 0, mx + mw, 0); mg.addColorStop(0, '#ffd45e'); mg.addColorStop(.5, '#f27a6e'); mg.addColorStop(1, '#3a3f86');
@@ -3507,7 +3534,7 @@ function drawHUD() {
   rrect(ctx, mx, 8, mw, 9, 4.5); ctx.strokeStyle = OUT; ctx.lineWidth = 1.3; ctx.stroke();
   circle(ctx, mx + mw * d, 12.5, 5.5); ink(ctx, d < 1 ? mix('#ffd45e', '#f27a6e', d) : '#fff4d0', 1.3);
   // what Isaac is carrying
-  let ix = 176;
+  let ix = mx + 100;
   ctx.font = `14px ${DISPLAY}`; ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
   if (have.has('umbrella')) { drawUmbrellaIcon(ix, 13, .9); ix += 18; }
   if (have.has('boots')) { drawBootsIcon(ix, 14, .8); ix += 18; }
@@ -3546,9 +3573,22 @@ function frame(now) {
 const startScreen = document.getElementById('startScreen'), winScreen = document.getElementById('winScreen');
 const continueBtn = document.getElementById('continueBtn');
 function refreshContinue() { continueBtn.hidden = !loadSave(); }
+const DIFF_PREF = 'dark-soon-difficulty';
+let pickedDiff = 'medium';
+try { pickedDiff = localStorage.getItem(DIFF_PREF) || 'medium'; } catch (e) {}
+function showDiff() {
+  document.querySelectorAll('.diff button').forEach(b => b.setAttribute('aria-pressed', b.dataset.diff === pickedDiff));
+  document.getElementById('diffNote').textContent = DIFFS[pickedDiff].note;
+}
+document.querySelectorAll('.diff button').forEach(b => b.addEventListener('click', () => {
+  pickedDiff = b.dataset.diff; showDiff();
+  try { localStorage.setItem(DIFF_PREF, pickedDiff); } catch (e) {}
+}));
+if (!DIFFS[pickedDiff]) pickedDiff = 'medium';
+showDiff();
 function begin(fromSave) { audioInit(); running = true; mapOpen = false; startGame(fromSave); startScreen.hidden = true; winScreen.hidden = true; }
 continueBtn.addEventListener('click', () => begin(true));
-document.getElementById('playBtn').addEventListener('click', () => { clearSave(); begin(false); });
+document.getElementById('playBtn').addEventListener('click', () => { clearSave(); setDifficulty(pickedDiff); begin(false); });
 document.getElementById('againBtn').addEventListener('click', () => { clearSave(); begin(false); });
 addEventListener('keydown', e => { if (!running && e.code === 'Enter') begin(!!loadSave()); });
 addEventListener('pagehide', () => { if (running) save(); });
