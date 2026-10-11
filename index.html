@@ -146,6 +146,26 @@ kbd {
   .touch { padding: 14px max(14px, env(safe-area-inset-right)) max(14px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left)); }
   .touch button:not(.mid button) { width: 76px; height: 76px; font-size: 28px; }
 }
+/* Phones. Upright, the game would be tiny, so ask for the phone to be turned sideways.
+   Sideways, drop the page title and key list so the whole game fits the screen height. */
+.rotate { display: none; position: absolute; inset: 0; z-index: 5; flex-direction: column; align-items: center; justify-content: center; gap: 10px; text-align: center; padding: 12px;
+  background: radial-gradient(closest-side, rgba(36,24,44,.85), rgba(28,20,36,.97)); color: var(--ink); font-family: var(--font-display); font-size: 1.5rem; }
+.rotate .phone { width: 34px; height: 56px; border: 4px solid var(--amber); border-radius: 8px; animation: tip 2.4s ease-in-out infinite; }
+@keyframes tip { 0%, 30% { transform: rotate(0); } 60%, 100% { transform: rotate(-90deg); } }
+@media (orientation: portrait) and (max-width: 700px) {
+  .rotate { display: flex; }
+  .bar { display: none; }
+}
+@media (orientation: landscape) and (max-height: 520px) {
+  header, .bar { display: none; }
+  .wrap { max-width: none; padding: 4px max(8px, env(safe-area-inset-right)) 4px max(8px, env(safe-area-inset-left)); }
+  .stage { width: auto; height: calc(100dvh - 8px); max-width: 100%; margin: 0 auto; }
+  #startText, .diff-note { display: none; }
+  .overlay h2 { font-size: 2.6rem; }
+  .overlay { gap: 8px; }
+  .btn { font-size: 1.25rem; padding: 3px 20px 1px; }
+  .touch button:not(.mid button) { width: 60px; height: 60px; }
+}
 </style>
 
 <div class="wrap">
@@ -175,7 +195,7 @@ kbd {
       <img class="hero-art" id="heroArt" alt="Isaac with his blue guitar">
       <div class="start-col">
       <h2>Dark Soon</h2>
-      <p>The cabin's firefly lanterns keep its strange things sleepy, and the fireflies have escaped. Catch them all before the sun goes down. It's a tricky old house: a bump sends Isaac back to the doorway, and long falls hurt. Touch a lantern to save your spot and refill your hearts. Press <kbd>M</kbd> for the map.</p>
+      <p id="startText">The cabin's firefly lanterns keep its strange things sleepy, and the fireflies have escaped. Catch them all before the sun goes down. It's a tricky old house: a bump sends Isaac back to the doorway, and long falls hurt. Touch a lantern to save your spot and refill your hearts. Press <kbd>M</kbd> for the map.</p>
       <div class="diff" role="group" aria-label="Difficulty">
         <button data-diff="easy" aria-pressed="false">Easy</button>
         <button data-diff="medium" aria-pressed="true">Medium</button>
@@ -189,6 +209,7 @@ kbd {
       </div>
       </div>
     </div>
+    <div class="rotate" aria-live="polite"><div class="phone"></div>Turn your phone sideways to play</div>
     <div class="overlay" id="winScreen" hidden>
       <h2 id="winTitle">Lanterns lit!</h2>
       <p id="winText">Every firefly is back.</p>
