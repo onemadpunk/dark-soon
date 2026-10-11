@@ -160,6 +160,7 @@ kbd {
     <div class="tools">
       <button class="small" id="mapBtn">Map</button>
       <button class="small" id="muteBtn">Sound: on</button>
+      <button class="small" id="musicBtn">Music: on</button>
     </div>
   </div>
 </div>
@@ -1762,7 +1763,15 @@ canvas.addEventListener('pointerdown', e => {
 
 // ---------- Audio ----------
 let actx = null, muted = false;
-function audioInit() { if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} } if (actx && actx.state === 'suspended') actx.resume(); }
+function audioInit() { if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} } if (actx && actx.state === 'suspended') actx.resume(); musicPlay(); }
+// Theme song: "Attic Glitch" by one_mad_punk. Browsers only allow it to start after a tap or key press.
+const music = new Audio('theme.mp3');
+music.loop = true; music.volume = 0.35; music.preload = 'auto';
+let musicOn = true;
+function musicPlay() { if (musicOn && !muted && !document.hidden && music.paused) music.play().catch(() => {}); }
+function musicSync() { if (musicOn && !muted && !document.hidden) musicPlay(); else music.pause(); }
+document.addEventListener('pointerdown', audioInit);
+document.addEventListener('visibilitychange', musicSync);
 function tone(freq, dur, type = 'square', vol = .06, slide = 0, delay = 0) {
   if (!actx || muted) return;
   const t0 = actx.currentTime + delay;
@@ -1806,7 +1815,8 @@ const sfx = {
   thud: () => tone(90, .15, 'triangle', .06, -40),
   snap: () => tone(420, .07, 'square', .04, -300),
 };
-document.getElementById('muteBtn').addEventListener('click', e => { muted = !muted; e.target.textContent = 'Sound: ' + (muted ? 'off' : 'on'); });
+document.getElementById('muteBtn').addEventListener('click', e => { muted = !muted; e.target.textContent = 'Sound: ' + (muted ? 'off' : 'on'); musicSync(); });
+document.getElementById('musicBtn').addEventListener('click', e => { musicOn = !musicOn; e.target.textContent = 'Music: ' + (musicOn ? 'on' : 'off'); musicSync(); });
 
 // ---------- Particles ----------
 function burst(x, y, n, col, spd = 80, life = .7, grav = 0) {
