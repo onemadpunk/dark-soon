@@ -232,7 +232,7 @@ kbd {
         <button class="btn" id="playBtn">New game</button>
         <button class="btn alt fsBtn" id="fullBtn">Full screen</button>
       </div>
-      <p class="credit">A <b>one mad punk</b> game<br>music: &ldquo;Attic Glitch&rdquo; by one_mad_punk</p>
+      <p class="credit">A <b>one mad punk</b> game<br>music by one_mad_punk</p>
       </div>
     </div>
     <div class="rotate" aria-live="polite"><div class="phone"></div>Turn your phone sideways to play</div>
@@ -1885,7 +1885,7 @@ function restartRoom() {
 }
 function enterRoom(key) {
   if (p.swing) { p.swing = null; p.wallLock = .3; }
-  roomKey = key; room = ROOMS[key]; sinceCatch = 0; beanHint = null; p.flip = false;
+  roomKey = key; room = ROOMS[key]; sinceCatch = 0; setTrack(areaOf(key)); beanHint = null; p.flip = false;
   for (const lv of room.levers) lv.touching = true; // stepping in on a lever doesn't flip it
   if (!room.layer) buildLayer(room);
   restartRoom();
@@ -2112,12 +2112,37 @@ canvas.addEventListener('pointerdown', e => { if (mapOpen) mapOpen = false; canv
 // ---------- Audio ----------
 let actx = null, muted = false;
 function audioInit() { if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} } if (actx && actx.state === 'suspended') actx.resume(); musicPlay(); }
-// Theme song: "Attic Glitch" by one_mad_punk. Browsers only allow it to start after a tap or key press.
-const music = new Audio('theme.mp3');
-music.loop = true; music.volume = 0.35; music.preload = 'auto';
-let musicOn = true;
+// Music by one_mad_punk, a track for each part of the house. Browsers only allow it to start after a tap or key press.
+const TRACKS = { house: 'music-house.mp3', attic: 'theme.mp3', woods: 'music-woods.mp3', secret: 'music-finale.mp3' };
+const MUSIC_VOL = 0.35, tracks = {};
+let musicOn = true, trackName = 'house', music = null;
+function getTrack(name) {
+  if (!tracks[name]) { const a = new Audio(TRACKS[name]); a.loop = true; a.volume = 0; a.preload = name === 'house' ? 'auto' : 'none'; tracks[name] = a; }
+  return tracks[name];
+}
+music = getTrack('house'); music.volume = MUSIC_VOL;
+function areaOf(key) { // which song goes with which room
+  const [x, y] = key.split(',').map(Number);
+  if (x < 0 || key === '0,5' || key === '0,4') return 'secret';
+  if (x >= 10 && key !== '10,3') return 'woods';
+  if (y <= 2 || y >= 5) return 'attic'; // attic, roof and cellar
+  return 'house';
+}
+function setTrack(name) { // fade the old song out and the new one in; each song remembers where it was
+  if (name === trackName) return;
+  trackName = name; music = getTrack(name);
+  musicPlay();
+}
+setInterval(() => { // the fader
+  for (const n in tracks) {
+    const a = tracks[n], want = n === trackName ? MUSIC_VOL : 0;
+    if (a.paused) continue;
+    a.volume = Math.max(0, Math.min(1, a.volume + Math.sign(want - a.volume) * Math.min(Math.abs(want - a.volume), .02)));
+    if (want === 0 && a.volume === 0) a.pause();
+  }
+}, 50);
 function musicPlay() { if (musicOn && !muted && !document.hidden && music.paused) music.play().catch(() => {}); }
-function musicSync() { if (musicOn && !muted && !document.hidden) musicPlay(); else music.pause(); }
+function musicSync() { if (musicOn && !muted && !document.hidden) musicPlay(); else for (const n in tracks) tracks[n].pause(); }
 document.addEventListener('pointerdown', audioInit);
 document.addEventListener('visibilitychange', musicSync);
 function tone(freq, dur, type = 'square', vol = .06, slide = 0, delay = 0) {
